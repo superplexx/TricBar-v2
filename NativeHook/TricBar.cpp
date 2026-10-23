@@ -653,13 +653,13 @@ static void ApplyLiquidGlassStyle(std::shared_ptr<Entry> const& e)
 
         if (!e->liquidGlassApplied)
             e->liquidGlassApplied = true;
-        const double width = std::clamp((appCount * 44.0) + 130.0, 190.0, 800.0);
+        const double width = std::clamp((appCount * 50.0) + 150.0, 220.0, 900.0);
         const bool widthChanged = e->liquidGlassWidth < 0 ||
             std::abs(e->liquidGlassWidth - width) >= 1;
         AnimateLiquidGlassWidth(e, width);
-        e->rect.Height(50);
-        e->rect.RadiusX(25);
-        e->rect.RadiusY(25);
+        e->rect.Height(54);
+        e->rect.RadiusX(27);
+        e->rect.RadiusY(27    );
         e->rect.HorizontalAlignment(wux::HorizontalAlignment::Center);
         e->rect.VerticalAlignment(wux::VerticalAlignment::Center);
         e->rect.Margin(wux::Thickness{ 0, 0, 0, 2 });
