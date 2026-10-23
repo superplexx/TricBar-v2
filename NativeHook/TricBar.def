@@ -1,0 +1,6 @@
+LIBRARY TricBar
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow   PRIVATE
+    TricBarInstallAccentHook
+    TricBarUninstallAccentHooks
