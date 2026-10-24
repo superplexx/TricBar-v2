@@ -1,5 +1,5 @@
 # TricBar v2
-(Go to English (US))[#en-us]
+[Go to English (US)](#en-us)
 
 # PT-BR
 O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Blur, Acrylic, Liquid Glass e cor sólida. O configurador permite escolher o modo visual, ajustar a cor e a opacidade e configurar a inicialização com o Windows
