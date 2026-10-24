@@ -1,5 +1,7 @@
 # TricBar v2
+(Go to English (US))[#en-us]
 
+# PT-BR
 O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Blur, Acrylic, Liquid Glass e cor sólida. O configurador permite escolher o modo visual, ajustar a cor e a opacidade e configurar a inicialização com o Windows
 
 ## Requisitos
@@ -53,3 +55,57 @@ O ZIP `TricBar-v2.zip` é o pacote sem runtimes externos que o WebSetup baixa. P
 ## Licença
 
 Consulte o arquivo de licença do repositório
+
+
+# EN-US
+TricBar customizes the appearance of the Windows taskbar with Blur, Acrylic, Liquid Glass, and solid color effects. The configurator allows you to choose the visual mode, adjust color and opacity, and set the application to launch automatically with Windows.
+
+## Requirements
+
+- Windows x64
+- Windows 10 (version 1809 or later) or Windows 11.
+- The **Light Liquid Glass** and **Dark Liquid Glass** modes require Windows 11 22H2 or later. On earlier versions, the app uses Acrylic as an alternative.
+
+## Installation
+
+Download the installers from the **Releases** section on GitHub:
+
+- **TricBar-v2-LocalSetup.exe** — a self-contained installer; includes all application files.
+- **TricBar-v2-WebSetup.exe** — a self-contained bootstrapper; it runs without requiring a pre-installed .NET runtime, downloading the necessary components and the application package during installation.
+
+The WebSetup includes the .NET runtime used by the installer itself, allowing it to launch on a machine without .NET installed. To keep the final application size smaller, the installer downloads and installs the **.NET 8 Desktop Runtime**, the **Windows App Runtime 1.6**, and the TricBar package during the process. Because the installer's own runtime is bundled into the executable, the WebSetup file is larger than a bootstrapper that relies on a pre-installed .NET runtime.
+
+The WebSetup downloads the application package from [`TricBar-v2.zip` on the `webdownloads` branch](https://raw.githubusercontent.com/superplexx/TricBar-v2/webdownloads/TricBar-v2.zip), along with the official installers for the .NET 8 Desktop Runtime and the Windows App Runtime 1.6. ## Building on Windows
+
+### Required Tools
+
+- .NET SDK 8 (the version for the repository is specified in [`global.json`](global.json))
+- Visual Studio 2022 with MSBuild
+- Workload/components for WinUI 3 and Windows App SDK
+- **Desktop development with C++** development tools (required to compile the native hook and engine)
+
+Close any running instances of TricBar before building, then run the following command in PowerShell from the repository root:
+
+```powershell
+.\build\buildsetup.ps1
+```
+
+The script builds the application and both installers. The resulting artifacts will be located in `dist\releases\`:
+
+- `TricBar-v2-LocalSetup.exe`
+- `TricBar-v2-WebSetup.exe`
+- `TricBar-v2.zip`
+
+The `TricBar-v2.zip` file is the package—excluding external runtimes—that the WebSetup installer downloads. Publish this file to the root of the `webdownloads` branch to ensure the URL configured in the installer remains valid.
+
+## Project Structure
+
+- `Launcher\` — WinUI 3 configurator
+- `Engine\` — TricBar native process/engine
+- `NativeHook\` — Native hook responsible for taskbar effects
+- `Installer\` — Source code and project files for the installers
+- `build\` — PowerShell scripts for building and packaging
+
+## License
+
+Please refer to the license file in the repository.
