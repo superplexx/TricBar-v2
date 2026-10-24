@@ -79,7 +79,7 @@
                     </StackPanel>
                 </Button>
                 <TextBlock x:Name="SidebarStatusText" Text="Verificando..." Foreground="#A99E9C" FontSize="11" Margin="12,0,0,0" />
-                <TextBlock Text="v2.0.0" Foreground="#746A68" FontSize="10" Margin="12,6,0,0" />
+                <TextBlock Text="v1.1.0" Foreground="#746A68" FontSize="10" Margin="12,6,0,0" />
             </StackPanel>
         </Grid>
 
@@ -225,14 +225,24 @@
                                     <ComboBoxItem Content="Transparente" Tag="clear" />
                                     <ComboBoxItem Content="Blur (desfoque)" Tag="blur" />
                                     <ComboBoxItem Content="Acrylic" Tag="acrylic" />
-                                    <ComboBoxItem Content="Light Liquid Glass" Tag="lightliquidglass" />
-                                    <ComboBoxItem Content="Dark Liquid Glass" Tag="darkliquidglass" />
+                                    <ComboBoxItem Content="Liquid Glass (Flutuante)" Tag="liquidglass" />
                                     <ComboBoxItem Content="Cor sólida" Tag="color" />
                                 </ComboBox>
-                                <TextBlock Text="Fundo translúcido com desfoque e textura Acrylic para a taskbar."
+                                <TextBlock x:Name="ModeDescriptionText"
+                                           Text="Fundo translúcido com desfoque e textura Acrylic para a taskbar."
                                            Foreground="#A99E9C" TextWrapping="Wrap" FontSize="12" />
+                                <StackPanel x:Name="LiquidGlassTonePanel" Spacing="8" Visibility="Collapsed">
+                                    <TextBlock Text="Tonalidade Liquid Glass" Style="{StaticResource SectionTitleStyle}" />
+                                    <ComboBox x:Name="LiquidGlassToneSelector"
+                                              SelectionChanged="LiquidGlassToneSelector_SelectionChanged">
+                                        <ComboBoxItem Content="Escuro" Tag="dark" />
+                                        <ComboBoxItem Content="Claro" Tag="light" />
+                                    </ComboBox>
+                                    <TextBlock Text="Selecione o tom escuro ou claro do Liquid Glass."
+                                               Foreground="#A99E9C" TextWrapping="Wrap" FontSize="12" />
+                                </StackPanel>
                                 <TextBlock x:Name="LiquidGlassCompatibilityWarning"
-                                           Text="Light Liquid Glass e Dark Liquid Glass requerem Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa."
+                                           Text="Liquid Glass requer Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa."
                                            Foreground="#E9B872" TextWrapping="Wrap" FontSize="12"
                                            Visibility="Collapsed" />
                             </StackPanel>

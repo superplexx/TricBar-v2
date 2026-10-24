@@ -232,7 +232,7 @@ internal static class Program
     private static void DownloadFile(string url, string destination)
     {
         using var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("TricBarSetup/2.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("TricBarSetup/1.1.0");
         using HttpResponseMessage response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
             .GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
@@ -293,7 +293,7 @@ internal static class Program
         using RegistryKey uninstallKey = Registry.LocalMachine.CreateSubKey(UninstallKeyPath, writable: true)
             ?? throw new InvalidOperationException("Não foi possível registrar o TricBar no Windows.");
         uninstallKey.SetValue("DisplayName", "TricBar");
-        uninstallKey.SetValue("DisplayVersion", "2.0.0");
+        uninstallKey.SetValue("DisplayVersion", "1.1.0");
         uninstallKey.SetValue("Publisher", "Superplex");
         uninstallKey.SetValue("InstallLocation", InstallDirectory);
         uninstallKey.SetValue("UninstallString", uninstallPath);

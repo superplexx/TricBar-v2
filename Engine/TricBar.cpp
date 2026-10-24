@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <oleacc.h>
+#include <UIAutomation.h>
 #include <stdint.h>
 #include <limits.h>
 #include <stdio.h>
@@ -15,6 +16,7 @@
 
 #pragma comment(lib, "oleacc.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "UIAutomationCore.lib")
 
 namespace
 {
@@ -24,10 +26,16 @@ constexpr wchar_t kMutexName[] = L"TricBar_SingleInstance";
 constexpr wchar_t kAliveName[] = L"TricBar_Blur_Alive";
 constexpr wchar_t kActiveName[] = L"TricBar_Blur_Active";
 constexpr wchar_t kAppliedName[] = L"TricBar_Blur_Applied";
+constexpr wchar_t kTaskbarAppCountMapping[] = L"Local\\TricBar_TaskbarAppCount";
 constexpr wchar_t kReloadMessage[] = L"TricBar_Reload";
+constexpr wchar_t kTaskbarAppButtonClass[] = L"Taskbar.TaskListButtonAutomationPeer";
 constexpr int kKeepAliveTimer = 1;
 constexpr int kCenterTimer = 2;
+constexpr int kTaskbarAppCountTimer = 3;
+constexpr int kTaskbarAppCountFallbackTimer = 4;
 constexpr int kMaxTaskbars = 16;
+constexpr UINT kTaskbarAppCountDebounceMs = 10;
+constexpr UINT kTaskbarAppCountFallbackMs = 1000;
 constexpr int kAdjustX = 28;
 constexpr uint32_t kWmTray = WM_APP + 1;
 constexpr UINT kMenuSettings = 1;
@@ -81,12 +89,17 @@ struct OleApartment
 
 HWND g_window;
 HWINEVENTHOOK g_eventHook;
+HWINEVENTHOOK g_taskbarAppCountEventHooks[5]{};
+DWORD g_taskbarAppCountExplorerPid;
 HANDLE g_mutex;
 HANDLE g_alive;
 HANDLE g_active;
 HANDLE g_applied;
+HANDLE g_taskbarAppCountMapping;
+volatile LONG* g_taskbarAppCountView;
 HMODULE g_accentLibrary;
 HICON g_trayIcon;
+IUIAutomation* g_uiAutomation;
 SetWindowCompositionAttributeFn g_setComposition;
 InstallAccentHookFn g_installAccentHook;
 UninstallAccentHooksFn g_uninstallAccentHooks;
@@ -108,6 +121,7 @@ FILETIME g_configStamp{};
 bool g_hasConfigStamp;
 UINT g_reloadMessage;
 int g_windowsBuild;
+bool g_uiAutomationFailureLogged;
 std::wstring g_tapPath;
 std::wstring g_tooltipSuffix;
 
@@ -268,6 +282,170 @@ bool TaskbarsStale()
     for (int i = 0; i < g_taskbarCount; ++i)
         if (!IsWindow(g_taskbars[i])) return true;
     return false;
+}
+
+bool InitializeTaskbarAppCounter()
+{
+    g_taskbarAppCountMapping = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(LONG), kTaskbarAppCountMapping);
+    if (!g_taskbarAppCountMapping) return false;
+    g_taskbarAppCountView = static_cast<volatile LONG*>(
+        MapViewOfFile(g_taskbarAppCountMapping, FILE_MAP_WRITE, 0, 0, sizeof(LONG)));
+    if (!g_taskbarAppCountView)
+    {
+        CloseHandle(g_taskbarAppCountMapping);
+        g_taskbarAppCountMapping = nullptr;
+        return false;
+    }
+    InterlockedExchange(g_taskbarAppCountView, 0);
+
+    return true;
+}
+
+void ReleaseTaskbarAppAutomation()
+{
+    if (g_uiAutomation)
+    {
+        g_uiAutomation->Release();
+        g_uiAutomation = nullptr;
+    }
+    g_uiAutomationFailureLogged = false;
+}
+
+void UpdateTaskbarAppCount()
+{
+    if (g_config.mode != Mode::LiquidGlass) return;
+
+    if (!g_uiAutomation)
+    {
+        const HRESULT result = CoCreateInstance(
+            CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&g_uiAutomation));
+        if (FAILED(result))
+        {
+            if (!g_uiAutomationFailureLogged)
+            {
+                OutputDebugStringW(L"TricBar: UI Automation initialization failed.\n");
+                g_uiAutomationFailureLogged = true;
+            }
+            return;
+        }
+        g_uiAutomationFailureLogged = false;
+    }
+
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    IUIAutomationElement* root = nullptr;
+    IUIAutomationCondition* buttonCondition = nullptr;
+    IUIAutomationElementArray* buttons = nullptr;
+    VARIANT className{};
+    VariantInit(&className);
+    className.vt = VT_BSTR;
+    className.bstrVal = SysAllocString(kTaskbarAppButtonClass);
+
+    HRESULT result = className.bstrVal
+        ? (taskbar
+        ? g_uiAutomation->ElementFromHandle(taskbar, &root)
+        : HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
+        : E_OUTOFMEMORY;
+    if (SUCCEEDED(result))
+        result = g_uiAutomation->CreatePropertyCondition(
+            UIA_ClassNamePropertyId, className, &buttonCondition);
+    if (SUCCEEDED(result))
+        result = root->FindAll(TreeScope_Descendants, buttonCondition, &buttons);
+    VariantClear(&className);
+    if (FAILED(result))
+    {
+        if (!g_uiAutomationFailureLogged)
+        {
+            OutputDebugStringW(L"TricBar: UI Automation could not enumerate taskbar buttons.\n");
+            g_uiAutomationFailureLogged = true;
+        }
+        if (buttons) buttons->Release();
+        if (buttonCondition) buttonCondition->Release();
+        if (root) root->Release();
+        return;
+    }
+
+    int count = 0;
+    int buttonCount = 0;
+    buttons->get_Length(&buttonCount);
+    for (int index = 0; index < buttonCount; ++index)
+    {
+        IUIAutomationElement* button = nullptr;
+        if (FAILED(buttons->GetElement(index, &button)) || !button) continue;
+
+        BOOL isOffscreen = TRUE;
+        RECT bounds{};
+        const HRESULT visibleResult = button->get_CurrentIsOffscreen(&isOffscreen);
+        const HRESULT boundsResult = button->get_CurrentBoundingRectangle(&bounds);
+        if (SUCCEEDED(visibleResult) && !isOffscreen &&
+            SUCCEEDED(boundsResult) && bounds.right > bounds.left && bounds.bottom > bounds.top)
+            ++count;
+
+        button->Release();
+    }
+
+    InterlockedExchange(g_taskbarAppCountView, count);
+    g_uiAutomationFailureLogged = false;
+    buttons->Release();
+    buttonCondition->Release();
+    root->Release();
+}
+
+void CALLBACK OnTaskbarAppCountEvent(
+    HWINEVENTHOOK, DWORD, HWND hwnd, LONG, LONG, DWORD, DWORD)
+{
+    if (g_exiting || !g_window) return;
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar || (hwnd != taskbar && !IsChild(taskbar, hwnd))) return;
+    KillTimer(g_window, kTaskbarAppCountTimer);
+    SetTimer(g_window, kTaskbarAppCountTimer, kTaskbarAppCountDebounceMs, nullptr);
+}
+
+void EnsureTaskbarAppCountEventHooks()
+{
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    DWORD pid = 0;
+    if (taskbar) GetWindowThreadProcessId(taskbar, &pid);
+    bool hooksInstalled = false;
+    for (HWINEVENTHOOK hook : g_taskbarAppCountEventHooks)
+        hooksInstalled = hooksInstalled || hook != nullptr;
+    if (!pid || (hooksInstalled && pid == g_taskbarAppCountExplorerPid)) return;
+
+    for (HWINEVENTHOOK& hook : g_taskbarAppCountEventHooks)
+    {
+        if (hook) UnhookWinEvent(hook);
+        hook = nullptr;
+    }
+    g_taskbarAppCountExplorerPid = pid;
+
+    constexpr DWORD events[] =
+    {
+        EVENT_OBJECT_CREATE,
+        EVENT_OBJECT_DESTROY,
+        EVENT_OBJECT_SHOW,
+        EVENT_OBJECT_HIDE,
+        EVENT_OBJECT_NAMECHANGE,
+        EVENT_OBJECT_REORDER,
+        EVENT_OBJECT_STATECHANGE,
+        EVENT_OBJECT_LOCATIONCHANGE
+    };
+    for (size_t index = 0; index < std::size(events); ++index)
+    {
+        g_taskbarAppCountEventHooks[index] = SetWinEventHook(
+            events[index], events[index], nullptr, OnTaskbarAppCountEvent,
+            pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    }
+}
+
+void RemoveTaskbarAppCountEventHooks()
+{
+    for (HWINEVENTHOOK& hook : g_taskbarAppCountEventHooks)
+    {
+        if (hook) UnhookWinEvent(hook);
+        hook = nullptr;
+    }
+    g_taskbarAppCountExplorerPid = 0;
 }
 
 void SetAccent(HWND hwnd, int state, uint32_t color)
@@ -566,6 +744,19 @@ void EnsureLegacyHook()
 
 void ApplySettings()
 {
+    if (g_config.mode == Mode::LiquidGlass)
+    {
+        UpdateTaskbarAppCount();
+        EnsureTaskbarAppCountEventHooks();
+        SetTimer(g_window, kTaskbarAppCountFallbackTimer, kTaskbarAppCountFallbackMs, nullptr);
+    }
+    else
+    {
+        KillTimer(g_window, kTaskbarAppCountTimer);
+        KillTimer(g_window, kTaskbarAppCountFallbackTimer);
+        RemoveTaskbarAppCountEventHooks();
+        ReleaseTaskbarAppAutomation();
+    }
     if (g_windowsBuild >= 22621)
     {
         if (g_config.mode == Mode::Normal) ResetEvent(g_active);
@@ -614,7 +805,7 @@ NOTIFYICONDATAW MakeTrayData()
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     data.uCallbackMessage = kWmTray;
     data.hIcon = g_trayIcon ? g_trayIcon : LoadIconW(nullptr, IDI_APPLICATION);
-    swprintf_s(data.szTip, L"TricBar 2.0%s", g_tooltipSuffix.c_str());
+    swprintf_s(data.szTip, L"TricBar 1.1%s", g_tooltipSuffix.c_str());
     return data;
 }
 
@@ -630,7 +821,10 @@ void ExitEngine()
     g_exiting = true;
     KillTimer(g_window, kKeepAliveTimer);
     KillTimer(g_window, kCenterTimer);
+    KillTimer(g_window, kTaskbarAppCountTimer);
+    KillTimer(g_window, kTaskbarAppCountFallbackTimer);
     if (g_eventHook) UnhookWinEvent(g_eventHook);
+    RemoveTaskbarAppCountEventHooks();
     ApplyAccent();
     if (g_windowsBuild < 22000) RestoreTaskbarPosition();
     if (g_active) ResetEvent(g_active);
@@ -681,12 +875,21 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             ApplyAccent();
             EnsureTap();
             EnsureLegacyHook();
+            if (g_config.mode == Mode::LiquidGlass)
+                EnsureTaskbarAppCountEventHooks();
             if (g_windowsBuild < 22000 && g_config.center)
             {
                 EnsureWinEventHook();
                 CenterTaskbar();
             }
         }
+        else if (wParam == kTaskbarAppCountTimer)
+        {
+            KillTimer(window, kTaskbarAppCountTimer);
+            UpdateTaskbarAppCount();
+        }
+        else if (wParam == kTaskbarAppCountFallbackTimer)
+            UpdateTaskbarAppCount();
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -723,6 +926,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
         g_applied = CreateEventW(nullptr, TRUE, FALSE, kAppliedName);
     if (!g_alive || !g_active || (g_windowsBuild >= 22621 && !g_applied))
         return static_cast<int>(GetLastError());
+    if (!InitializeTaskbarAppCounter())
+        return static_cast<int>(GetLastError());
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     g_setComposition = reinterpret_cast<SetWindowCompositionAttributeFn>(
@@ -757,10 +962,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
         DispatchMessageW(&message);
     }
     if (g_eventHook) UnhookWinEvent(g_eventHook);
+    RemoveTaskbarAppCountEventHooks();
     if (g_trayIcon) DestroyIcon(g_trayIcon);
     if (g_alive) CloseHandle(g_alive);
     if (g_active) CloseHandle(g_active);
     if (g_applied) CloseHandle(g_applied);
+    if (g_taskbarAppCountView) UnmapViewOfFile(const_cast<LONG*>(g_taskbarAppCountView));
+    if (g_taskbarAppCountMapping) CloseHandle(g_taskbarAppCountMapping);
+    ReleaseTaskbarAppAutomation();
     if (g_mutex) ReleaseMutex(g_mutex), CloseHandle(g_mutex);
     if (g_accentLibrary) FreeLibrary(g_accentLibrary);
     return static_cast<int>(message.wParam);

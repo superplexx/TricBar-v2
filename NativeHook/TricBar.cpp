@@ -61,9 +61,10 @@ static const GUID CLSID_TricBarBlur =
 static constexpr wchar_t kAliveEvent[]   = L"TricBar_Blur_Alive";
 static constexpr wchar_t kActiveEvent[]  = L"TricBar_Blur_Active";
 static constexpr wchar_t kAppliedEvent[] = L"TricBar_Blur_Applied";
+static constexpr wchar_t kTaskbarAppCountMapping[] = L"Local\\TricBar_TaskbarAppCount";
 static constexpr char kCompositionFunction[] = "SetWindowCompositionAttribute";
 static constexpr wchar_t kTagMarker[]    = L"TricBar.Transparent";
-static constexpr wchar_t kVersion[]      = L"2.0.0";
+static constexpr wchar_t kVersion[]      = L"1.1.0";
 
 struct CompositionAttributeData
 {
@@ -81,6 +82,9 @@ static std::atomic_flag g_installingImportHook = ATOMIC_FLAG_INIT;
 static std::atomic<DWORD> g_nextInstallAttempt{};
 static std::mutex g_hookLock;
 static std::vector<std::pair<DWORD, HHOOK>> g_taskbarHooks;
+static std::atomic<int> g_taskbarAppCount{ 0 };
+static HANDLE g_taskbarAppCountMapping{};
+static const volatile LONG* g_taskbarAppCountView{};
 
 static BOOL WINAPI SetWindowCompositionAttributeHook(HWND hwnd, CompositionAttributeData* data);
 static LRESULT CALLBACK TaskbarThreadHook(int code, WPARAM wParam, LPARAM lParam);
@@ -526,6 +530,7 @@ struct Entry
     bool alive{ false };    // callback + timer registrados
     bool enabled{ false };  // fundo atualmente transparente
     bool liquidGlassApplied{ false };
+    bool liquidGlassStyleConfigured{ false };
 };
 
 static void RestoreLiquidGlassStyle(std::shared_ptr<Entry> const& e)
@@ -549,50 +554,32 @@ static void RestoreLiquidGlassStyle(std::shared_ptr<Entry> const& e)
     }
     catch (...) {}
     e->liquidGlassApplied = false;
+    e->liquidGlassStyleConfigured = false;
 }
 
-struct OpenAppWindowCount
+static int ReadTaskbarAppCount()
 {
-    int count{};
-};
-
-static BOOL CALLBACK CountOpenAppWindow(HWND hwnd, LPARAM parameter)
-{
-    if (!IsWindowVisible(hwnd) || (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD))
-        return TRUE;
-
-    const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    if (((exStyle & WS_EX_TOOLWINDOW) || GetWindow(hwnd, GW_OWNER)) &&
-        !(exStyle & WS_EX_APPWINDOW))
-        return TRUE;
-
-    wchar_t title[2]{};
-    if (GetWindowTextW(hwnd, title, _countof(title)) <= 0)
-        return TRUE;
-
-    RECT bounds{};
-    if (!GetWindowRect(hwnd, &bounds) || bounds.right <= bounds.left || bounds.bottom <= bounds.top)
-        return TRUE;
-
-    wchar_t className[128]{};
-    if (GetClassNameW(hwnd, className, _countof(className)) <= 0)
-        return TRUE;
-    if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
-        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0 ||
-        wcscmp(className, L"Progman") == 0 ||
-        wcscmp(className, L"WorkerW") == 0 ||
-        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0)
-        return TRUE;
-
-    ++reinterpret_cast<OpenAppWindowCount*>(parameter)->count;
-    return TRUE;
-}
-
-static int CountOpenAppWindows()
-{
-    OpenAppWindowCount count;
-    EnumWindows(CountOpenAppWindow, reinterpret_cast<LPARAM>(&count));
-    return count.count;
+    if (!g_taskbarAppCountView)
+    {
+        if (!g_taskbarAppCountMapping)
+            g_taskbarAppCountMapping = OpenFileMappingW(
+                FILE_MAP_READ, FALSE, kTaskbarAppCountMapping);
+        if (g_taskbarAppCountMapping)
+            g_taskbarAppCountView = static_cast<const volatile LONG*>(
+                MapViewOfFile(g_taskbarAppCountMapping, FILE_MAP_READ, 0, 0, sizeof(LONG)));
+        if (!g_taskbarAppCountView && g_taskbarAppCountMapping)
+        {
+            CloseHandle(g_taskbarAppCountMapping);
+            g_taskbarAppCountMapping = nullptr;
+        }
+    }
+    if (g_taskbarAppCountView)
+    {
+        const LONG count = *g_taskbarAppCountView;
+        if (count >= 0)
+            g_taskbarAppCount.store(static_cast<int>(count), std::memory_order_relaxed);
+    }
+    return g_taskbarAppCount.load(std::memory_order_relaxed);
 }
 
 static void AnimateLiquidGlassWidth(std::shared_ptr<Entry> const& e, double targetWidth)
@@ -623,7 +610,7 @@ static void AnimateLiquidGlassWidth(std::shared_ptr<Entry> const& e, double targ
                 if (!entry || !entry->liquidGlassAnimating) return;
 
                 const double progress = std::min(
-                    static_cast<double>(GetTickCount64() - entry->liquidGlassAnimationStart) / 260.0, 1.0);
+                    static_cast<double>(GetTickCount64() - entry->liquidGlassAnimationStart) / 65.0, 1.0);
                 const double eased = 1.0 - std::pow(1.0 - progress, 3.0);
                 const double width = entry->liquidGlassAnimationFrom +
                     (entry->liquidGlassWidth - entry->liquidGlassAnimationFrom) * eased;
@@ -649,25 +636,29 @@ static void ApplyLiquidGlassStyle(std::shared_ptr<Entry> const& e)
 {
     try
     {
-        const int appCount = CountOpenAppWindows();
+        const int appCount = ReadTaskbarAppCount();
 
         if (!e->liquidGlassApplied)
             e->liquidGlassApplied = true;
-        const double width = std::clamp((appCount * 50.0) + 150.0, 220.0, 900.0);
+        const double width = std::clamp((appCount * 32.0) + 180.0, 180.0, 800.0);
         const bool widthChanged = e->liquidGlassWidth < 0 ||
             std::abs(e->liquidGlassWidth - width) >= 1;
         AnimateLiquidGlassWidth(e, width);
-        e->rect.Height(54);
-        e->rect.RadiusX(27);
-        e->rect.RadiusY(27    );
-        e->rect.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        e->rect.VerticalAlignment(wux::VerticalAlignment::Center);
-        e->rect.Margin(wux::Thickness{ 0, 0, 0, 2 });
-        e->rect.Stroke(wuxm::SolidColorBrush(winrt::Windows::UI::Color{ 160, 240, 255, 255 }));
-        e->rect.StrokeThickness(1.0);
-        e->rect.Opacity(1.0);
+        if (!e->liquidGlassStyleConfigured)
+        {
+            e->rect.Height(54);
+            e->rect.RadiusX(27);
+            e->rect.RadiusY(27);
+            e->rect.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            e->rect.VerticalAlignment(wux::VerticalAlignment::Center);
+            e->rect.Margin(wux::Thickness{ 0, 0, 0, 2 });
+            e->rect.Stroke(wuxm::SolidColorBrush(winrt::Windows::UI::Color{ 160, 240, 255, 255 }));
+            e->rect.StrokeThickness(1.0);
+            e->rect.Opacity(1.0);
+            e->liquidGlassStyleConfigured = true;
+        }
         if (widthChanged)
-            Log(L"[v%s] geometria Liquid Glass atualizada: largura=%.0f apps abertos=%d", kVersion, width, appCount);
+            Log(L"[v%s] geometria Liquid Glass atualizada: largura=%.0f apps na barra=%d", kVersion, width, appCount);
     }
     catch (...)
     {
@@ -751,7 +742,7 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
     if (EffectActive()) Enable(e);
 
     e->timer = wux::DispatcherTimer();
-    e->timer.Interval(std::chrono::milliseconds(400));
+    e->timer.Interval(std::chrono::milliseconds(25));
     e->timer.Tick([e](wf::IInspectable const&, wf::IInspectable const&)
     {
         if (!AppAlive()) { Teardown(e); return; }

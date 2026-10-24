@@ -33,19 +33,27 @@ $appBuild = if ($OutputDirectory) {
 $launcherBin = Join-Path $root "Launcher\bin"
 $launcherObj = Join-Path $root "Launcher\obj"
 
-$runningConfigurator = Get-Process -Name "TricBarConfigurator" -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.Path -and
-        [string]::Equals(
-            [IO.Path]::GetFullPath($_.Path),
-            [IO.Path]::GetFullPath((Join-Path $appBuild "TricBarConfigurator.exe")),
-            [StringComparison]::OrdinalIgnoreCase
-        )
-    } |
-    Select-Object -First 1
+$appExecutables = @(
+    @{ Name = "TricBarConfigurator"; File = "TricBarConfigurator.exe" },
+    @{ Name = "TricBar"; File = "TricBar.exe" }
+)
+$runningAppProcesses = foreach ($app in $appExecutables) {
+    $expectedPath = [IO.Path]::GetFullPath((Join-Path $appBuild $app.File))
+    Get-Process -Name $app.Name -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Path -and
+            [string]::Equals(
+                [IO.Path]::GetFullPath($_.Path),
+                $expectedPath,
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        }
+}
 
-if ($runningConfigurator) {
-    throw "Feche o TricBarConfigurator.exe que está aberto em dist\app e execute o build novamente. O processo está bloqueando arquivos como clrjit.dll."
+if ($runningAppProcesses) {
+    $processNames = ($runningAppProcesses | ForEach-Object { "$($_.ProcessName).exe" } |
+        Sort-Object -Unique) -join ", "
+    throw "Feche $processNames antes de compilar. O Engine mantém a DLL do hook carregada; reabra o TricBar após o build para carregar a versão atualizada."
 }
 
 foreach ($path in @($appBuild, $launcherBin, $launcherObj)) {

@@ -25,7 +25,7 @@ public sealed partial class MainWindow : Window
     private const string ConfigFileName = "config.ini";
     private const uint WmClose = 0x0010;
     private static readonly uint ReloadMessage = RegisterWindowMessageW("TricBar_Reload");
-    private static readonly string[] ModeKeys = ["normal", "clear", "blur", "acrylic", "lightliquidglass", "darkliquidglass", "color"];
+    private static readonly string[] ModeKeys = ["normal", "clear", "blur", "acrylic", "liquidglass", "color"];
     private static readonly bool IsEnglish = CultureInfo.CurrentUICulture.Name.StartsWith(
         "en", StringComparison.OrdinalIgnoreCase);
     private static readonly IReadOnlyDictionary<string, string> EnglishText =
@@ -54,6 +54,19 @@ public sealed partial class MainWindow : Window
             ["Normal (padrão do Windows)"] = "Normal (Windows default)",
             ["Blur (desfoque)"] = "Blur",
             ["Liquid Glass"] = "Liquid Glass",
+            ["Tonalidade Liquid Glass"] = "Liquid Glass tone",
+            ["Escuro"] = "Dark",
+            ["Claro"] = "Light",
+            ["Liquid Glass (Escuro)"] = "Dark Liquid Glass",
+            ["Liquid Glass (Claro)"] = "Light Liquid Glass",
+            ["Selecione o tom escuro ou claro do Liquid Glass."] =
+                "Choose the dark or light Liquid Glass tone.",
+            ["Usa o visual padrão do Windows."] = "Uses the default Windows appearance.",
+            ["Barra transparente que revela o papel de parede."] =
+                "Transparent taskbar that reveals your wallpaper.",
+            ["Aplica desfoque ao fundo da barra."] = "Applies blur to the taskbar background.",
+            ["Aplica uma cor sólida com opacidade ajustável."] =
+                "Applies a solid color with adjustable opacity.",
             ["Vidro translúcido flutuante"] = "Floating translucent glass",
             ["Liquid Glass requer Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa."] =
                 "Liquid Glass requires Windows 11 22H2 or later. On Windows 10, TricBar uses Acrylic as a fallback.",
@@ -230,6 +243,9 @@ public sealed partial class MainWindow : Window
         foreach (ComboBoxItem item in ModeSelector.Items)
             if (item.Content is string text)
                 item.Content = T(text);
+        foreach (ComboBoxItem item in LiquidGlassToneSelector.Items)
+        if (item.Content is string text)
+            item.Content = T(text);
         LoadConfig();
         ShowPage(HomePage);
         UpdateEnabled();
@@ -286,6 +302,7 @@ public sealed partial class MainWindow : Window
         try
         {
             string mode = "acrylic";
+            string liquidGlassTone = "dark";
             int color = 0x808080;
             int opacity = 60;
             bool center = true;
@@ -313,10 +330,22 @@ public sealed partial class MainWindow : Window
                     }
                 }
             }
-            if (mode == "mica" || mode == "liquidglass") mode = "lightliquidglass";
-            if (mode == "macos") mode = "lightliquidglass";
+            if (mode is "lightliquidglass" or "mica" or "macos")
+            {
+                mode = "liquidglass";
+                liquidGlassTone = "light";
+            }
+            else if (mode == "darkliquidglass")
+            {
+                mode = "liquidglass";
+            }
+            else if (mode == "liquidglass")
+            {
+                liquidGlassTone = "light";
+            }
             int index = Array.IndexOf(ModeKeys, mode);
             ModeSelector.SelectedIndex = index < 0 ? 3 : index;
+            LiquidGlassToneSelector.SelectedIndex = liquidGlassTone == "light" ? 1 : 0;
             _rgb = color;
             HexColor.Text = FormatColor(_rgb);
             SetPreview(_rgb);
@@ -344,7 +373,7 @@ public sealed partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(_configDirectory);
-            string mode = (ModeSelector.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "clear";
+            string mode = GetSelectedMode();
             string text =
                 $"mode={mode}\r\n" +
                 $"color={_rgb.ToString("X6", CultureInfo.InvariantCulture)}\r\n" +
@@ -453,10 +482,19 @@ public sealed partial class MainWindow : Window
         foreach (var child in Presets.Children)
             if (child is Button button) button.IsEnabled = useColor;
         OpacitySlider.IsEnabled = useColor;
+        LiquidGlassTonePanel.Visibility = mode == "liquidglass" ? Visibility.Visible : Visibility.Collapsed;
         LiquidGlassCompatibilityWarning.Text = T(
-            "Light Liquid Glass e Dark Liquid Glass requerem Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa.");
-        bool liquidGlassCompat = mode is "lightliquidglass" or "darkliquidglass" && Environment.OSVersion.Version.Build < 22621;
+            "Liquid Glass requer Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa.");
+        bool liquidGlassCompat = mode == "liquidglass" && Environment.OSVersion.Version.Build < 22621;
         LiquidGlassCompatibilityWarning.Visibility = liquidGlassCompat ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private string GetSelectedMode()
+    {
+        string mode = (ModeSelector.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "clear";
+        if (mode != "liquidglass") return mode;
+        string tone = (LiquidGlassToneSelector.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "dark";
+        return tone == "light" ? "lightliquidglass" : "darkliquidglass";
     }
 
     private void ScheduleSave()
@@ -492,26 +530,44 @@ public sealed partial class MainWindow : Window
         if (ModeSelector is null) return;
         UpdateEnabled();
         UpdateModeSummary();
-        ScheduleSave();
+        if (!_loading) ScheduleSave();
+    }
+
+    private void LiquidGlassToneSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (LiquidGlassToneSelector is null) return;
+        UpdateModeSummary();
+        if (!_loading) ScheduleSave();
     }
 
     private void UpdateModeSummary()
     {
         if (ModeSelector.SelectedItem is not ComboBoxItem selected) return;
-        string mode = selected.Tag?.ToString() ?? "clear";
+        string mode = GetSelectedMode();
+        string style = selected.Tag?.ToString() ?? "clear";
         string label = mode switch
         {
             "normal" => "Normal",
             "clear" => T("Transparente"),
             "blur" => "Blur",
             "acrylic" => "Acrylic",
-            "lightliquidglass" => "Light Liquid Glass",
-            "darkliquidglass" => "Dark Liquid Glass",
+            "lightliquidglass" => T("Liquid Glass (Claro)"),
+            "darkliquidglass" => T("Liquid Glass (Escuro)"),
             "color" => T("Cor sólida"),
             _ => "Acrylic"
         };
         HomeModeText.Text = label;
         HomeModeDetailText.Text = label;
+        ModeDescriptionText.Text = T(style switch
+        {
+            "normal" => "Usa o visual padrão do Windows.",
+            "clear" => "Barra transparente que revela o papel de parede.",
+            "blur" => "Aplica desfoque ao fundo da barra.",
+            "acrylic" => "Fundo translúcido com desfoque e textura Acrylic para a taskbar.",
+            "liquidglass" => "Selecione o tom escuro ou claro do Liquid Glass.",
+            "color" => "Aplica uma cor sólida com opacidade ajustável.",
+            _ => "Fundo translúcido com desfoque e textura Acrylic para a taskbar."
+        });
         HomeColorPreview.Background = new SolidColorBrush(Color.FromArgb(
             255, (byte)(_rgb >> 16), (byte)(_rgb >> 8), (byte)_rgb));
         WindowsVersionText.Text = Environment.OSVersion.Version.Build >= 22000
@@ -557,6 +613,11 @@ public sealed partial class MainWindow : Window
     private void QuickMode_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string mode }) return;
+        if (mode is "lightliquidglass" or "darkliquidglass")
+        {
+            LiquidGlassToneSelector.SelectedIndex = mode == "lightliquidglass" ? 1 : 0;
+            mode = "liquidglass";
+        }
         for (int index = 0; index < ModeSelector.Items.Count; index++)
         {
             if (ModeSelector.Items[index] is ComboBoxItem item &&

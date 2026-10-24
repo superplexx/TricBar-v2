@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Company>Superplex</Company>
     <Copyright>Superplex</Copyright>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <TricBarWebSetup Condition="'$(TricBarWebSetup)' == ''">false</TricBarWebSetup>
     <SelfContained Condition="'$(TricBarWebSetup)' == 'true'">false</SelfContained>
     <SelfContained Condition="'$(TricBarWebSetup)' != 'true'">true</SelfContained>
