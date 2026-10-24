@@ -15,11 +15,11 @@ O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Bl
 Baixe os instaladores na seção **Releases** do GitHub:
 
 - **TricBar-v2-LocalSetup.exe** — instalador autocontido; inclui os arquivos do aplicativo
-- **TricBar-v2-WebSetup.exe** — bootstrapper leve; baixa os componentes necessários e o pacote do aplicativo durante a instalação
+- **TricBar-v2-WebSetup.exe** — bootstrapper autocontido; abre sem exigir .NET previamente instalado e baixa os componentes necessários e o pacote do aplicativo durante a instalação
 
-O WebSetup publicado neste repositório precisa do **.NET 8 Desktop Runtime** para iniciar. Ele baixa esse runtime durante o processo, mas, em um computador sem o runtime instalado, o bootstrapper gerenciado pode não abrir para iniciar o download. Para uma instalação em máquina limpa, use o LocalSetup até que o WebSetup seja publicado com um bootstrapper que não dependa previamente do .NET
+O WebSetup inclui o runtime .NET usado pelo próprio instalador, portanto pode iniciar em uma máquina sem .NET. Para manter o aplicativo final menor, o instalador ainda baixa e instala o **.NET 8 Desktop Runtime**, o **Windows App Runtime 1.6** e o pacote do TricBar durante o processo. Como o runtime do instalador é incluído no executável, o WebSetup fica maior que um bootstrapper dependente de .NET instalado previamente.
 
-O WebSetup baixa o pacote do aplicativo de [`TricBar-v2.zip` na branch `webdownloads`](https://raw.githubusercontent.com/superplexx/TricBar-v2/webdownloads/TricBar-v2.zip), além dos instaladores oficiais do .NET Desktop Runtime 8 e do Windows App Runtime 1.6, quando consegue iniciar
+O WebSetup baixa o pacote do aplicativo de [`TricBar-v2.zip` na branch `webdownloads`](https://raw.githubusercontent.com/superplexx/TricBar-v2/webdownloads/TricBar-v2.zip), além dos instaladores oficiais do .NET Desktop Runtime 8 e do Windows App Runtime 1.6.
 
 ## Compilar no Windows
 
