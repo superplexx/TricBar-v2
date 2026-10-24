@@ -8,7 +8,7 @@ O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Bl
 
 - Windows x64
 - Windows 10 (versão mínima 1809) ou Windows 11.
-- Os modos **Light Liquid Glass** e **Dark Liquid Glass** requerem Windows 11 22H2 ou posterior. Em versões anteriores, o app usa Acrylic como alternativa
+- Os modos **Liquid Glass Claro** e **Liquid Glass Escuro** requerem Windows 11 22H2 ou posterior. Em versões anteriores, o app usa Acrylic como alternativa
 
 ## Instalação
 
