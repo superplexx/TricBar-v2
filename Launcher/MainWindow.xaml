@@ -79,7 +79,7 @@
                     </StackPanel>
                 </Button>
                 <TextBlock x:Name="SidebarStatusText" Text="Verificando..." Foreground="#A99E9C" FontSize="11" Margin="12,0,0,0" />
-                <TextBlock Text="v1.1.0" Foreground="#746A68" FontSize="10" Margin="12,6,0,0" />
+                <TextBlock Text="v1.2.0" Foreground="#746A68" FontSize="10" Margin="12,6,0,0" />
             </StackPanel>
         </Grid>
 
