@@ -14,8 +14,8 @@ O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Bl
 
 Baixe os instaladores na seção **Releases** do GitHub:
 
-- **TricBar-v2-LocalSetup.exe** — instalador autocontido; inclui os arquivos do aplicativo
-- **TricBar-v2-WebSetup.exe** — bootstrapper autocontido; abre sem exigir .NET previamente instalado e baixa os componentes necessários e o pacote do aplicativo durante a instalação
+- **TricBar-v2-LocalSetup.exe** — instalador autocontido; inclui os arquivos do aplicativo - RECOMENDADO
+- **TricBar-v2-WebSetup.exe** — bootstrapper autocontido; abre sem exigir .NET previamente instalado e baixa os componentes necessários e o pacote do aplicativo durante a instalação - Em fase de Testes, é necessário executá-lo como Administardor
 
 O WebSetup inclui o runtime .NET usado pelo próprio instalador, portanto pode iniciar em uma máquina sem .NET. Para manter o aplicativo final menor, o instalador ainda baixa e instala o **.NET 8 Desktop Runtime**, o **Windows App Runtime 1.6** e o pacote do TricBar durante o processo. Como o runtime do instalador é incluído no executável, o WebSetup fica maior que um bootstrapper dependente de .NET instalado previamente.
 
@@ -71,8 +71,8 @@ TricBar customizes the appearance of the Windows taskbar with Blur, Acrylic, Liq
 
 Download the installers from the **Releases** section on GitHub:
 
-- **TricBar-v2-LocalSetup.exe** — a self-contained installer; includes all application files.
-- **TricBar-v2-WebSetup.exe** — a lightweight bootstrapper; downloads the necessary components and the application package during installation.
+- **TricBar-v2-LocalSetup.exe** — a self-contained installer; includes all application files. - RECOMENDED
+- **TricBar-v2-WebSetup.exe** — a lightweight bootstrapper; downloads the necessary components and the application package during installation. - This is in the testing phase; it must be run as an administrator.
 
 The WebSetup provided in this repository requires the **.NET 8 Desktop Runtime** to launch. While it attempts to download this runtime during the installation process, the managed bootstrapper may fail to open—and thus fail to initiate the download—if the runtime is not already installed on your computer. For a clean-machine installation, use LocalSetup until WebSetup is released with a bootstrapper that does not have a pre-existing dependency on .NET
 
