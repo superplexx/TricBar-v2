@@ -11,9 +11,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Company>Superplex</Company>
     <Copyright>Superplex</Copyright>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
     <InformationalVersion>1.1.0</InformationalVersion>
     <AssemblyTitle>TricBarSetup</AssemblyTitle>
     <Product>TricBarSetup</Product>
