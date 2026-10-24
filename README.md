@@ -1,3 +1,6 @@
+<img width="980" height="661" alt="image" src="https://github.com/user-attachments/assets/34b6b1e6-76a3-4727-b01c-0c88e10476d4" />
+
+
 # TricBar v2
 [Go to English (US)](#en-us)
 
