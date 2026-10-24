@@ -12,14 +12,19 @@
     <Company>Superplex</Company>
     <Copyright>Superplex</Copyright>
     <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
+    <AssemblyTitle>TricBarSetup</AssemblyTitle>
+    <Product>TricBarSetup</Product>
+    <Description>TricBarSetup</Description>
     <TricBarWebSetup Condition="'$(TricBarWebSetup)' == ''">false</TricBarWebSetup>
-    <SelfContained Condition="'$(TricBarWebSetup)' == 'true'">false</SelfContained>
-    <SelfContained Condition="'$(TricBarWebSetup)' != 'true'">true</SelfContained>
+    <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <AppBundleArchivePath Condition="'$(AppBundleArchivePath)' == ''">$(MSBuildThisFileDirectory)..\dist\TricBar-v2-LocalBundle.zip</AppBundleArchivePath>
     <DefineConstants Condition="'$(TricBarWebSetup)' == 'true'">$(DefineConstants);TRICBAR_WEB_SETUP</DefineConstants>
-    <EnableCompressionInSingleFile Condition="'$(TricBarWebSetup)' != 'true'">true</EnableCompressionInSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TricBarWebSetup)' != 'true'">

@@ -68,14 +68,11 @@ $localSetup = Join-Path $localPublish "TricBarSetup.exe"
 if (-not (Test-Path -LiteralPath $localSetup)) { throw "O instalador Local não foi gerado." }
 Copy-Item -LiteralPath $localSetup -Destination (Join-Path $dist "TricBar-v2-LocalSetup.exe") -Force
 
-Write-Host "[5/5] Publicando TricBar-v2-WebSetup.exe..."
-& $msbuild $setupProject /restore /t:Publish /p:Configuration=Release `
-    /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:PublishSingleFile=true `
-    /p:TricBarWebSetup=true "/p:PublishDir=$webPublish\" /v:minimal
-if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador Web." }
-$webSetup = Join-Path $webPublish "TricBarSetup.exe"
-if (-not (Test-Path -LiteralPath $webSetup)) { throw "O instalador Web não foi gerado." }
-Copy-Item -LiteralPath $webSetup -Destination (Join-Path $dist "TricBar-v2-WebSetup.exe") -Force
+Write-Host "[5/5] Compilando o bootstrapper nativo do WebSetup..."
+& (Join-Path $root "build\WebSetupBootstrap\build.bat")
+if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar o bootstrapper nativo do instalador Web." }
+$webSetup = Join-Path $dist "TricBar-v2-WebSetup.exe"
+if (-not (Test-Path -LiteralPath $webSetup)) { throw "O instalador Web nativo não foi gerado." }
 
 Write-Host "Instalador Local: $(Join-Path $dist 'TricBar-v2-LocalSetup.exe')"
 Write-Host "Instalador Web:   $(Join-Path $dist 'TricBar-v2-WebSetup.exe')"

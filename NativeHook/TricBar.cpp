@@ -46,6 +46,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 #include <tlhelp32.h>
 
@@ -61,7 +62,6 @@ static const GUID CLSID_TricBarBlur =
 static constexpr wchar_t kAliveEvent[]   = L"TricBar_Blur_Alive";
 static constexpr wchar_t kActiveEvent[]  = L"TricBar_Blur_Active";
 static constexpr wchar_t kAppliedEvent[] = L"TricBar_Blur_Applied";
-static constexpr wchar_t kTaskbarAppCountMapping[] = L"Local\\TricBar_TaskbarAppCount";
 static constexpr char kCompositionFunction[] = "SetWindowCompositionAttribute";
 static constexpr wchar_t kTagMarker[]    = L"TricBar.Transparent";
 static constexpr wchar_t kVersion[]      = L"1.1.0";
@@ -82,9 +82,11 @@ static std::atomic_flag g_installingImportHook = ATOMIC_FLAG_INIT;
 static std::atomic<DWORD> g_nextInstallAttempt{};
 static std::mutex g_hookLock;
 static std::vector<std::pair<DWORD, HHOOK>> g_taskbarHooks;
-static std::atomic<int> g_taskbarAppCount{ 0 };
-static HANDLE g_taskbarAppCountMapping{};
-static const volatile LONG* g_taskbarAppCountView{};
+// Contagem dos botoes de apps da barra (Taskbar.TaskListButton), feita aqui dentro do Explorer.
+// g_taskListGen sobe toda vez que um botao entra ou sai da arvore visual.
+static std::atomic<uint32_t> g_taskListGen{ 1 };
+static std::mutex g_taskListLock;
+static std::unordered_set<uint64_t> g_taskListHandles;
 
 static BOOL WINAPI SetWindowCompositionAttributeHook(HWND hwnd, CompositionAttributeData* data);
 static LRESULT CALLBACK TaskbarThreadHook(int code, WPARAM wParam, LPARAM lParam);
@@ -531,7 +533,17 @@ struct Entry
     bool enabled{ false };  // fundo atualmente transparente
     bool liquidGlassApplied{ false };
     bool liquidGlassStyleConfigured{ false };
+    int liquidGlassAppCount{ -1 };
+    int buttonCount{ -1 };       // ultima contagem de botoes da barra
+    uint32_t buttonGen{ 0 };     // g_taskListGen visto na ultima contagem
+    ULONGLONG nextRecount{ 0 };  // proxima recontagem completa (varre a arvore)
+    ULONGLONG nextQuick{ 0 };    // proxima reavaliacao rapida dos botoes ja conhecidos
+    std::vector<winrt::weak_ref<wux::FrameworkElement>> buttons;  // botoes achados na ultima varredura
+    winrt::weak_ref<wux::FrameworkElement> buttonRoot;            // raiz da arvore da barra
+    bool geometry{ false };  // true so no fundo da barra principal (flyouts so recebem cor)
 };
+
+static bool IsMainTaskbarBackground(wux::DependencyObject const& start);
 
 static void RestoreLiquidGlassStyle(std::shared_ptr<Entry> const& e)
 {
@@ -555,31 +567,130 @@ static void RestoreLiquidGlassStyle(std::shared_ptr<Entry> const& e)
     catch (...) {}
     e->liquidGlassApplied = false;
     e->liquidGlassStyleConfigured = false;
+    e->liquidGlassAppCount = -1;
 }
 
-static int ReadTaskbarAppCount()
+// Conta os Taskbar.TaskListButton visiveis na arvore XAML da barra (mesmo criterio que o
+// UI Automation usava: botao de app, visivel e com tamanho). Sobe da propria barra ate a
+// raiz e desce pelos filhos; so roda quando um botao entra/sai ou a cada 10 s.
+// Diagnostico: registra (uma vez cada, no maximo 16) os nomes de classe com "TaskList" que aparecem.
+static void NoteTaskListName(wchar_t const* where, std::wstring_view name)
 {
-    if (!g_taskbarAppCountView)
+    static std::mutex lock;
+    static std::unordered_set<std::wstring> seen;
+    std::lock_guard<std::mutex> guard(lock);
+    if (seen.size() >= 16) return;
+    if (seen.insert(std::wstring(name)).second)
+        Log(L"[v%s] %s: %s", kVersion, where, std::wstring(name).c_str());
+}
+
+// Botao realmente na tela: visivel, com tamanho, opaco e dentro da area da barra.
+// Botoes de apps fechados ficam reciclados na arvore (fora da area visivel) e nao contam.
+static bool ButtonOnScreen(wux::FrameworkElement const& fe, wux::FrameworkElement const& root)
+{
+    try
     {
-        if (!g_taskbarAppCountMapping)
-            g_taskbarAppCountMapping = OpenFileMappingW(
-                FILE_MAP_READ, FALSE, kTaskbarAppCountMapping);
-        if (g_taskbarAppCountMapping)
-            g_taskbarAppCountView = static_cast<const volatile LONG*>(
-                MapViewOfFile(g_taskbarAppCountMapping, FILE_MAP_READ, 0, 0, sizeof(LONG)));
-        if (!g_taskbarAppCountView && g_taskbarAppCountMapping)
+        if (fe.Visibility() != wux::Visibility::Visible) return false;
+        const double w = fe.ActualWidth(), h = fe.ActualHeight();
+        if (!(w > 0 && h > 0)) return false;
+        if (fe.Opacity() <= 0.01) return false;
+        if (!root) return true;
+        const wf::Point pt = fe.TransformToVisual(root).TransformPoint(wf::Point{ 0, 0 });
+        const double rw = root.ActualWidth(), rh = root.ActualHeight();
+        if (rw > 0 && (pt.X + w <= 0 || pt.X >= rw)) return false;
+        if (rh > 0 && (pt.Y + h <= 0 || pt.Y >= rh)) return false;
+        return true;
+    }
+    catch (...) { return true; }
+}
+
+// Varredura completa: acha os botoes de apps na arvore XAML da barra (sobe ate a raiz e desce).
+static int ScanTaskListButtons(std::shared_ptr<Entry> const& e, int previous)
+{
+    try
+    {
+        wux::DependencyObject root = e->rect;
+        for (;;)
         {
-            CloseHandle(g_taskbarAppCountMapping);
-            g_taskbarAppCountMapping = nullptr;
+            auto parent = wuxm::VisualTreeHelper::GetParent(root);
+            if (!parent) break;
+            root = parent;
         }
+        auto rootFe = root.try_as<wux::FrameworkElement>();
+        if (rootFe) e->buttonRoot = winrt::make_weak(rootFe);
+        else e->buttonRoot = nullptr;
+        e->buttons.clear();
+
+        int count = 0;
+        std::vector<wux::DependencyObject> stack;
+        stack.push_back(root);
+        while (!stack.empty())
+        {
+            wux::DependencyObject cur = stack.back();
+            stack.pop_back();
+
+            winrt::hstring cls = winrt::get_class_name(cur);
+            std::wstring_view clsView{ cls };
+            const bool taskList = clsView.find(L"TaskList") != std::wstring_view::npos;
+            if (taskList) NoteTaskListName(L"classe na arvore", clsView);
+            if (taskList &&
+                clsView.find(L"Button") != std::wstring_view::npos &&
+                clsView.find(L"Peer") == std::wstring_view::npos &&
+                clsView.find(L"Panel") == std::wstring_view::npos)
+            {
+                if (auto fe = cur.try_as<wux::FrameworkElement>())
+                {
+                    e->buttons.push_back(winrt::make_weak(fe));
+                    if (ButtonOnScreen(fe, rootFe)) ++count;
+                }
+                continue;  // nao precisa descer dentro do botao
+            }
+
+            const int children = wuxm::VisualTreeHelper::GetChildrenCount(cur);
+            for (int k = 0; k < children; ++k)
+                stack.push_back(wuxm::VisualTreeHelper::GetChild(cur, k));
+        }
+        return count;
     }
-    if (g_taskbarAppCountView)
+    catch (...)
     {
-        const LONG count = *g_taskbarAppCountView;
-        if (count >= 0)
-            g_taskbarAppCount.store(static_cast<int>(count), std::memory_order_relaxed);
+        return previous;
     }
-    return g_taskbarAppCount.load(std::memory_order_relaxed);
+}
+
+// Reavaliacao rapida: so os botoes ja conhecidos (poucos), sem varrer a arvore.
+static int QuickCountButtons(std::shared_ptr<Entry> const& e)
+{
+    wux::FrameworkElement rootFe{ nullptr };
+    if (e->buttonRoot) rootFe = e->buttonRoot.get();
+    int count = 0;
+    for (auto const& weak : e->buttons)
+        if (auto fe = weak.get())
+            if (ButtonOnScreen(fe, rootFe)) ++count;
+    return count;
+}
+
+static int CurrentButtonCount(std::shared_ptr<Entry> const& e)
+{
+    const uint32_t gen = g_taskListGen.load(std::memory_order_relaxed);
+    const ULONGLONG now = GetTickCount64();
+    const int before = e->buttonCount;
+    if (before < 0 || gen != e->buttonGen || now >= e->nextRecount)
+    {
+        e->buttonGen = gen;
+        e->buttonCount = ScanTaskListButtons(e, before < 0 ? 0 : before);
+        // se mudou, confere de novo em 400 ms (o layout do botao novo ainda pode nao ter largura)
+        e->nextRecount = now + (e->buttonCount != before ? 400 : e->buttonCount == 0 ? 1000 : 10000);
+        e->nextQuick = now + 250;
+    }
+    else if (now >= e->nextQuick)
+    {
+        e->nextQuick = now + 250;
+        e->buttonCount = QuickCountButtons(e);
+    }
+    if (e->buttonCount != before)
+        Log(L"[v%s] botoes de apps na barra: %d (conhecidos: %zu)", kVersion, e->buttonCount, e->buttons.size());
+    return e->buttonCount;
 }
 
 static void AnimateLiquidGlassWidth(std::shared_ptr<Entry> const& e, double targetWidth)
@@ -634,9 +745,13 @@ static void AnimateLiquidGlassWidth(std::shared_ptr<Entry> const& e, double targ
 
 static void ApplyLiquidGlassStyle(std::shared_ptr<Entry> const& e)
 {
+    if (!e->geometry) return;  // flyouts (preview etc.) seguem so a cor da barra
     try
     {
-        const int appCount = ReadTaskbarAppCount();
+        const int appCount = CurrentButtonCount(e);
+        if (e->liquidGlassStyleConfigured && appCount == e->liquidGlassAppCount)
+            return;
+        e->liquidGlassAppCount = appCount;
 
         if (!e->liquidGlassApplied)
             e->liquidGlassApplied = true;
@@ -732,6 +847,8 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
     e->originalVerticalAlignment = rect.VerticalAlignment();
     e->originalMargin = rect.Margin();
     e->originalStrokeThickness = rect.StrokeThickness();
+    try { e->geometry = IsMainTaskbarBackground(rect); }
+    catch (...) { e->geometry = false; }  // se falhar, o fundo ainda recebe cor
     RefreshCfg();
     e->applied = GetCfg();
     e->ours = MakeBrush(e->applied);
@@ -739,10 +856,32 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
 
     rect.Tag(winrt::box_value(winrt::hstring{ kTagMarker }));
 
+    // Se o sistema trocar o Fill (ex.: ao abrir o preview), reaplica o nosso.
+    try
+    {
+        e->token = rect.RegisterPropertyChangedCallback(wuxs::Shape::FillProperty(),
+            [weak = std::weak_ptr<Entry>(e)](wux::DependencyObject const&, wux::DependencyProperty const&)
+            {
+                auto entry = weak.lock();
+                if (!entry || !entry->alive || !entry->enabled || !entry->ours) return;
+                try
+                {
+                    auto cur = entry->rect.Fill();
+                    if (cur != entry->ours)
+                    {
+                        entry->original = cur;
+                        entry->rect.Fill(entry->ours);
+                    }
+                }
+                catch (...) {}
+            });
+    }
+    catch (...) {}
+
     if (EffectActive()) Enable(e);
 
     e->timer = wux::DispatcherTimer();
-    e->timer.Interval(std::chrono::milliseconds(25));
+    e->timer.Interval(std::chrono::milliseconds(100));
     e->timer.Tick([e](wf::IInspectable const&, wf::IInspectable const&)
     {
         if (!AppAlive()) { Teardown(e); return; }
@@ -771,26 +910,54 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
     e->timer.Start();
 }
 
-static bool IsTaskbarElement(wux::DependencyObject const& start)
+// Todo Rectangle "BackgroundFill"/"BackgroundStroke" da barra recebe cor/transparencia
+// (inclusive os flyouts: preview de janelas, jump lists etc., que seguem o estilo da barra).
+static bool IsTaskbarElement(wux::DependencyObject const&)
 {
+    return true;  // o VisualTreeWatcher ja filtra pelo nome do retangulo
+}
+
+// Mas a GEOMETRIA do Liquid Glass (capsula, altura, borda) so vale para o fundo da barra
+// principal. Nos flyouts ela fazia a capsula aparecer dentro do preview. Entao: sobe a
+// arvore, recusa se achar um ancestral de flyout e exige o TaskbarFrame/TaskbarBackground.
+static bool IsMainTaskbarBackground(wux::DependencyObject const& start)
+{
+    static constexpr std::wstring_view kExcluded[] =
+    {
+        L"Thumbnail", L"Flyout", L"Popup", L"ToolTip", L"ContextMenu",
+        L"MenuFlyout", L"JumpView", L"Preview", L"Overflow", L"Hover"
+    };
+
+    bool inMainTaskbar = false;
     for (wux::DependencyObject cur = start; cur; cur = wuxm::VisualTreeHelper::GetParent(cur))
     {
         winrt::hstring name = winrt::get_class_name(cur);
         std::wstring_view sv{ name };
-        if (sv.find(L"Taskbar") != std::wstring_view::npos)
-            return true;
+
+        for (auto const& word : kExcluded)
+            if (sv.find(word) != std::wstring_view::npos)
+            {
+                Log(L"[v%s] fundo de flyout (so cor, sem geometria): %s", kVersion, name.c_str());
+                return false;
+            }
+
+        if (sv.find(L"Taskbar.TaskbarFrame") != std::wstring_view::npos ||
+            sv.find(L"Taskbar.TaskbarBackground") != std::wstring_view::npos)
+            inMainTaskbar = true;
 
         if (auto fe = cur.try_as<wux::FrameworkElement>())
         {
-            auto elementName = fe.Name();
-            std::wstring_view elementNameView{ elementName };
-            if (elementNameView.find(L"Taskbar") != std::wstring_view::npos ||
-                elementNameView == L"BackgroundFill" ||
-                elementNameView == L"BackgroundStroke")
-                return true;
+            winrt::hstring elementNameStr = fe.Name();
+            std::wstring_view elementName{ elementNameStr };
+            for (auto const& word : kExcluded)
+                if (elementName.find(word) != std::wstring_view::npos)
+                {
+                    Log(L"[v%s] fundo de flyout (so cor, sem geometria): %s", kVersion, elementNameStr.c_str());
+                    return false;
+                }
         }
     }
-    return false;
+    return inMainTaskbar;
 }
 
 static void HandleRectangle(wuxs::Rectangle const& rect)
@@ -846,6 +1013,29 @@ struct VisualTreeWatcher : winrt::implements<VisualTreeWatcher, IVisualTreeServi
     {
         try
         {
+            // Acompanha a entrada/saida de botoes de apps da barra (Taskbar.TaskListButton).
+            if (mutationType == Add)
+            {
+                if (element.Type && std::wcsstr(element.Type, L"TaskList"))
+                {
+                    NoteTaskListName(L"tipo adicionado", element.Type);
+                    {
+                        std::lock_guard<std::mutex> lock(g_taskListLock);
+                        g_taskListHandles.insert(static_cast<uint64_t>(element.Handle));
+                    }
+                    g_taskListGen.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            else
+            {
+                bool removed = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_taskListLock);
+                    removed = g_taskListHandles.erase(static_cast<uint64_t>(element.Handle)) != 0;
+                }
+                if (removed) g_taskListGen.fetch_add(1, std::memory_order_relaxed);
+            }
+
             if (mutationType == Add && element.Type && element.Name &&
                 std::wcscmp(element.Type, L"Windows.UI.Xaml.Shapes.Rectangle") == 0 &&
                 (std::wcscmp(element.Name, L"BackgroundFill") == 0 ||
