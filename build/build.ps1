@@ -70,7 +70,7 @@ Copy-Item -LiteralPath $localSetup -Destination (Join-Path $dist "TricBar-v2-Loc
 
 Write-Host "[5/5] Publicando TricBar-v2-WebSetup.exe..."
 & $msbuild $setupProject /restore /t:Publish /p:Configuration=Release `
-    /p:RuntimeIdentifier=win-x64 /p:SelfContained=false /p:PublishSingleFile=true `
+    /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:PublishSingleFile=true `
     /p:TricBarWebSetup=true "/p:PublishDir=$webPublish\" /v:minimal
 if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador Web." }
 $webSetup = Join-Path $webPublish "TricBarSetup.exe"
