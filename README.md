@@ -1,7 +1,13 @@
 # TricBar v2
-<img width="980" height="661" alt="image" src="https://github.com/user-attachments/assets/34b6b1e6-76a3-4727-b01c-0c88e10476d4" />
+<img width="1144" height="726" alt="image" src="https://github.com/user-attachments/assets/904fca09-d31e-40d7-ad7a-c5aea6ad8340" />
 
 [Go to English (US)](#en-us)
+
+## Novidades na v1.3.0
+
+- Interface do configurador renovada: cartões de modos rápidos com miniatura do efeito, indicador de página ativa na navegação lateral, badge de versão e cartão "Sobre" em Configurações
+- Novos atalhos na página de aparência: mais cores rápidas e botão "Restaurar padrão"
+- Botão para abrir o repositório no GitHub diretamente pela aba Configurações
 
 # PT-BR
 O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Blur, Acrylic, Liquid Glass e cor sólida. O configurador permite escolher o modo visual, ajustar a cor e a opacidade e configurar a inicialização com o Windows
@@ -16,8 +22,8 @@ O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Bl
 
 Baixe os instaladores na seção **Releases** do GitHub:
 
-- **TricBar-v2-LocalSetup.exe** — instalador autocontido; inclui os arquivos do aplicativo - RECOMENDADO
-- **TricBar-v2-WebSetup.exe** — bootstrapper autocontido; abre sem exigir .NET previamente instalado e baixa os componentes necessários e o pacote do aplicativo durante a instalação - EXPERIMENTAL, RODE COMO ADMIN
+- **TricBar-v2-LocalSetup.exe** — instalador autocontido; inclui os arquivos do aplicativo
+- **TricBar-v2-WebSetup.exe** — bootstrapper autocontido; abre sem exigir .NET previamente instalado e baixa os componentes necessários e o pacote do aplicativo durante a instalação
 
 O WebSetup inclui o runtime .NET usado pelo próprio instalador, portanto pode iniciar em uma máquina sem .NET. Para manter o aplicativo final menor, o instalador ainda baixa e instala o **.NET 8 Desktop Runtime**, o **Windows App Runtime 1.6** e o pacote do TricBar durante o processo. Como o runtime do instalador é incluído no executável, o WebSetup fica maior que um bootstrapper dependente de .NET instalado previamente.
 
@@ -58,9 +64,14 @@ O ZIP `TricBar-v2.zip` é o pacote sem runtimes externos que o WebSetup baixa. P
 
 Consulte o arquivo de licença do repositório
 
-
 # EN-US
 TricBar customizes the appearance of the Windows taskbar with Blur, Acrylic, Liquid Glass, and solid color effects. The configurator allows you to choose the visual mode, adjust color and opacity, and set the application to launch automatically with Windows.
+
+## What's new in v1.3.0
+
+- Revamped configurator interface: quick-mode cards featuring effect thumbnails, an active-page indicator in the side navigation, a version badge, and an "About" card within Settings
+- New shortcuts on the appearance page: additional quick-select colors and a "Restore defaults" button
+- A button to open the GitHub repository directly from the Settings tab
 
 ## Requirements
 
@@ -72,8 +83,8 @@ TricBar customizes the appearance of the Windows taskbar with Blur, Acrylic, Liq
 
 Download the installers from the **Releases** section on GitHub:
 
-- **TricBar-v2-LocalSetup.exe** — a self-contained installer; includes all application files. - RECOMENDED
-- **TricBar-v2-WebSetup.exe** — a self-contained bootstrapper; it runs without requiring a pre-installed .NET runtime, downloading the necessary components and the application package during installation. EXPERIMENTAL - RUN WITH ADMINISTRATOR
+- **TricBar-v2-LocalSetup.exe** — a self-contained installer; includes all application files
+- **TricBar-v2-WebSetup.exe** — a self-contained bootstrapper; it runs without requiring a pre-installed .NET runtime, downloading the necessary components and the application package during installation
 
 The WebSetup includes the .NET runtime used by the installer itself, allowing it to launch on a machine without .NET installed. To keep the final application size smaller, the installer downloads and installs the **.NET 8 Desktop Runtime**, the **Windows App Runtime 1.6**, and the TricBar package during the process. Because the installer's own runtime is bundled into the executable, the WebSetup file is larger than a bootstrapper that relies on a pre-installed .NET runtime.
 
