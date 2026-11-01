@@ -2,96 +2,183 @@
     x:Class="TricBarConfigurator.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid x:Name="RootGrid" RequestedTheme="Dark" Background="Transparent">
+    <Grid x:Name="RootGrid" RequestedTheme="Dark" Background="#0F0F12">
         <Grid.Resources>
-            <SolidColorBrush x:Key="SystemAccentBrush" Color="#9b7cff" />
+            <SolidColorBrush x:Key="SystemAccentBrush" Color="#FFD60A" />
+            <SolidColorBrush x:Key="BrandBlueBrush" Color="#4D9FFF" />
+            <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#131316" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1A1F" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#2B2B33" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F4F4F6" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A5A5B2" />
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#787A84" />
+            <SolidColorBrush x:Key="DividerBrush" Color="#28282E" />
+            <SolidColorBrush x:Key="VersionAccentBrush" Color="#FFD60A" />
+            <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#FFD60A" Offset="0.0" />
+                <GradientStop Color="#FFB300" Offset="1.0" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="SidebarGradientBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#141416" Offset="0.0" />
+                <GradientStop Color="#0C0C0E" Offset="1.0" />
+            </LinearGradientBrush>
+
             <Style x:Key="NavButtonStyle" TargetType="Button">
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
-                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="Padding" Value="14,10" />
                 <Setter Property="MinHeight" Value="42" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="#F0ECEC" />
+                <Setter Property="Foreground" Value="#D8D8E0" />
                 <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="FontSize" Value="13.5" />
             </Style>
-            <Style x:Key="QuickCardButtonStyle" TargetType="Button">
-                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="HorizontalContentAlignment" Value="Left" />
-                <Setter Property="Padding" Value="18,16" />
-                <Setter Property="Background" Value="#2B2A30" />
-                <Setter Property="Foreground" Value="#F4F4F4" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="12" />
-            </Style>
+
             <Style x:Key="CardStyle" TargetType="Border">
-                <Setter Property="Background" Value="#2B2A30" />
+                <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
                 <Setter Property="CornerRadius" Value="14" />
                 <Setter Property="Padding" Value="20" />
-                <Setter Property="BorderBrush" Value="#3A393F" />
+                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
             </Style>
+
+            <Style x:Key="ModeTileStyle" TargetType="Border">
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="36" />
+                <Setter Property="CornerRadius" Value="9" />
+                <Setter Property="Padding" Value="3" />
+            </Style>
+
+            <Style x:Key="SwatchStyle" TargetType="Button">
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="7" />
+                <Setter Property="BorderBrush" Value="#555562" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+
+            <Style x:Key="ModeCardButtonStyle" TargetType="Button">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Padding" Value="16,14" />
+                <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="10" />
+            </Style>
+
             <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontSize" Value="15" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Foreground" Value="#F4EFED" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             </Style>
         </Grid.Resources>
+
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="188" />
+            <ColumnDefinition Width="220" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="0" Background="#1B1A1F" Padding="10,18,10,12">
+        <!-- Sidebar Navigation -->
+        <Grid Grid.Column="0" Background="{StaticResource SidebarGradientBrush}" Padding="12,20,12,16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="1" Spacing="6" Margin="0,18,0,8">
-                <Button x:Name="HomeNavButton" Style="{StaticResource NavButtonStyle}" Click="HomeNavButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Home" Foreground="#E8E0FF" />
-                        <TextBlock Text="Início" VerticalAlignment="Center" />
+            <!-- Brand header -->
+            <StackPanel Grid.Row="0" Spacing="6" Margin="8,4,8,20">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Image x:Name="BrandLogo" Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="TricBar" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="Painel de Controle" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                     </StackPanel>
+                </StackPanel>
+                <Rectangle Height="1" Margin="0,14,0,0" Fill="{StaticResource DividerBrush}" />
+            </StackPanel>
+
+            <!-- Navigation Links -->
+            <StackPanel Grid.Row="1" Spacing="4">
+                <Button x:Name="HomeNavButton" Style="{StaticResource NavButtonStyle}" Click="HomeNavButton_Click">
+                    <Grid>
+                        <Border x:Name="NavIndicatorHome" Width="3" CornerRadius="2" HorizontalAlignment="Left"
+                                Margin="-12,-2,0,-2" Background="{StaticResource AccentGradientBrush}" Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Home" Foreground="{StaticResource BrandBlueBrush}" />
+                            <TextBlock Text="Início" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
                 </Button>
                 <Button x:Name="AppearanceNavButton" Style="{StaticResource NavButtonStyle}" Click="AppearanceNavButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Edit" Foreground="#E8E0FF" />
-                        <TextBlock Text="Aparência" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid>
+                        <Border x:Name="NavIndicatorAppearance" Width="3" CornerRadius="2" HorizontalAlignment="Left"
+                                Margin="-12,-2,0,-2" Background="{StaticResource AccentGradientBrush}" Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Edit" Foreground="{StaticResource BrandBlueBrush}" />
+                            <TextBlock Text="Aparência" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
                 </Button>
                 <Button x:Name="SettingsNavButton" Style="{StaticResource NavButtonStyle}" Click="SettingsNavButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon Symbol="Setting" Foreground="#E8E0FF" />
-                        <TextBlock Text="Configurações" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid>
+                        <Border x:Name="NavIndicatorSettings" Width="3" CornerRadius="2" HorizontalAlignment="Left"
+                                Margin="-12,-2,0,-2" Background="{StaticResource AccentGradientBrush}" Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SymbolIcon Symbol="Setting" Foreground="{StaticResource BrandBlueBrush}" />
+                            <TextBlock Text="Configurações" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
                 </Button>
             </StackPanel>
 
-            <StackPanel Grid.Row="2" Spacing="8">
-                <Rectangle Height="1" Fill="#4C4850" Margin="0,0,0,8" />
-                <Button x:Name="ToggleButton" Style="{StaticResource NavButtonStyle}" Click="ToggleButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <SymbolIcon x:Name="EngineIcon" Symbol="Play" Foreground="#E8E0FF" />
-                        <TextBlock x:Name="EngineActionText" Text="Iniciar TricBar" VerticalAlignment="Center" />
+            <!-- Sidebar Footer / Engine Status Card -->
+            <StackPanel Grid.Row="2" Spacing="10">
+                <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="10" Padding="12"
+                        BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Ellipse x:Name="EngineStatusDot" Width="8" Height="8" Fill="#5BBE82" VerticalAlignment="Center" />
+                            <TextBlock x:Name="SidebarStatusText" Text="Verificando..." Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button x:Name="ToggleButton" HorizontalAlignment="Stretch" Padding="8,6"
+                                Background="#30303C" Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderThickness="0" CornerRadius="6" Click="ToggleButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <SymbolIcon x:Name="EngineIcon" Symbol="Play" />
+                                <TextBlock x:Name="EngineActionText" Text="Iniciar TricBar" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
-                </Button>
-                <TextBlock x:Name="SidebarStatusText" Text="Verificando..." Foreground="#A99E9C" FontSize="11" Margin="12,0,0,0" />
-                <TextBlock Text="v1.2.0" Foreground="#746A68" FontSize="10" Margin="12,6,0,0" />
+                </Border>
+                <TextBlock Text="TricBar · Windows Utility" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" HorizontalAlignment="Center" />
+                <TextBlock Text="v1.3.0" Foreground="{StaticResource VersionAccentBrush}" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </StackPanel>
         </Grid>
 
+        <!-- Main Content Area -->
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-            <Grid Padding="32,24,32,32" MaxWidth="1100" HorizontalAlignment="Left" Loaded="Content_Loaded">
+            <Grid Padding="36,28,36,36" MaxWidth="1100" HorizontalAlignment="Left" Loaded="Content_Loaded">
+
+                <!-- 1. HOME / DASHBOARD PAGE -->
                 <Grid x:Name="HomePage">
-                    <StackPanel Spacing="18">
+                    <StackPanel Spacing="22">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Bem-vindo ao TricBar" FontSize="36" FontWeight="SemiBold" Foreground="#F4F0F2" Margin="0,4,0,0" />
-                            <TextBlock Text="Sua barra de tarefas, do seu jeito." Foreground="#BBAAA5" FontSize="14" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="Bem-vindo ao TricBar" FontSize="30" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                <Border VerticalAlignment="Center" CornerRadius="8" Padding="10,4"
+                                        Background="#26FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1">
+                                    <TextBlock Text="v1.3.0" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource VersionAccentBrush}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Sua barra de tarefas, do seu jeito." Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" />
                         </StackPanel>
 
+                        <!-- Status Overview Cards -->
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -99,128 +186,190 @@
                             </Grid.ColumnDefinitions>
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="ESTADO DO MOTOR" FontSize="11" Foreground="#A99E9C" FontWeight="SemiBold" />
+                                    <TextBlock Text="ESTADO DO MOTOR" FontSize="11" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Ellipse x:Name="EngineStatusDot" Width="10" Height="10" Fill="#8B8583" VerticalAlignment="Center" />
-                                        <TextBlock x:Name="HomeEngineStatus" Text="Verificando..." FontSize="22" FontWeight="SemiBold" Foreground="#F5F1F0" />
+                                        <TextBlock x:Name="HomeEngineStatus" Text="Verificando..." FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                             <Border Grid.Column="1" Style="{StaticResource CardStyle}">
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="APARÊNCIA ATUAL" FontSize="11" Foreground="#A99E9C" FontWeight="SemiBold" />
+                                    <TextBlock Text="APARÊNCIA ATUAL" FontSize="11" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Border x:Name="HomeColorPreview" Width="22" Height="22" CornerRadius="5" Background="#808080" BorderBrush="#5B535A" BorderThickness="1" />
-                                        <TextBlock x:Name="HomeModeText" Text="Acrylic" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#F5F1F0" />
+                                        <Border x:Name="HomeColorPreview" Width="20" Height="20" CornerRadius="4" Background="#808080" BorderBrush="#505058" BorderThickness="1" />
+                                        <TextBlock x:Name="HomeModeText" Text="Acrylic" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                         </Grid>
 
-                        <Border Style="{StaticResource CardStyle}" Padding="20,8">
+                        <!-- Quick Mode Selection Grid -->
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Modos Rápidos" Style="{StaticResource SectionTitleStyle}" />
+                            <Grid ColumnSpacing="12" RowSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Button Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="clear">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#B21F1F" Offset="0.0" />
+                                                    <GradientStop Color="#FDBB2D" Offset="1.0" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border CornerRadius="6" Background="#12FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Transparente" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Revela o papel de parede" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="1" Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="blur">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#9B7BB8" Offset="0.0" />
+                                                    <GradientStop Color="#3E6E9E" Offset="1.0" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border CornerRadius="6" Background="#28FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Blur" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Desfoque suave" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="2" Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="acrylic">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#7E7E8E" Offset="0.0" />
+                                                    <GradientStop Color="#3E3E4E" Offset="1.0" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border CornerRadius="6" Background="#38FFFFFF" BorderBrush="#55FFFFFF" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Acrylic" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Transparência com textura" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Grid.Row="1" Grid.Column="0" Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="lightliquidglass">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#F2F6FF" Offset="0.0" />
+                                                    <GradientStop Color="#BFD3F2" Offset="1.0" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border CornerRadius="6" Background="#30C8D8FF" BorderBrush="#88FFFFFF" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Liquid Glass (Claro)" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Vidro translúcido flutuante claro" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Row="1" Grid.Column="1" Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="darkliquidglass">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#2A2E48" Offset="0.0" />
+                                                    <GradientStop Color="#12141F" Offset="1.0" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border CornerRadius="6" Background="#24A0B0FF" BorderBrush="#6690A0C8" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Liquid Glass (Escuro)" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Vidro translúcido flutuante escuro" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Row="1" Grid.Column="2" Style="{StaticResource ModeCardButtonStyle}" Click="QuickMode_Click" Tag="normal">
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <Border Style="{StaticResource ModeTileStyle}" Background="#4E4E58">
+                                            <Border CornerRadius="6" Background="#28FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1" />
+                                        </Border>
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="Normal (Windows)" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="Usa o visual padrão do Windows." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- System Specs Card -->
+                        <Border Style="{StaticResource CardStyle}" Padding="18,8">
                             <StackPanel>
                                 <Grid Padding="0,10">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid Width="12" Height="12" VerticalAlignment="Center">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="8" />
-                                            <RowDefinition Height="2" />
-                                            <RowDefinition Height="2" />
-                                        </Grid.RowDefinitions>
-                                        <Border Width="12" Height="7" BorderBrush="{StaticResource SystemAccentBrush}" BorderThickness="1" CornerRadius="1" />
-                                        <Rectangle Grid.Row="1" Width="1" Fill="{StaticResource SystemAccentBrush}" />
-                                        <Rectangle Grid.Row="2" Width="7" Height="1" Fill="{StaticResource SystemAccentBrush}" VerticalAlignment="Center" />
-                                    </Grid>
-                                    <TextBlock Grid.Column="1" Text="Sistema operacional" Foreground="#D9D1CF" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="WindowsVersionText" Grid.Column="2" Text="Windows" Foreground="#A99E9C" VerticalAlignment="Center" />
+                                    <TextBlock Text="Sistema operacional" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="WindowsVersionText" Grid.Column="1" Text="Windows" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </Grid>
-                                <Rectangle Height="1" Fill="#454040" />
+                                <Rectangle Height="1" Fill="{StaticResource DividerBrush}" />
                                 <Grid Padding="0,10">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <PathIcon Foreground="{StaticResource SystemAccentBrush}" Width="12" Height="12"
-                                              Data="M1,2 L11,2 L11,3 L1,3 Z M1,5.5 L5,5.5 L5,6.5 L1,6.5 Z M7,5.5 L11,5.5 L11,6.5 L7,6.5 Z M1,9 L11,9 L11,10 L1,10 Z" />
-                                    <TextBlock Grid.Column="1" Text="Modo da barra" Foreground="#D9D1CF" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="HomeModeDetailText" Grid.Column="2" Text="Acrylic" Foreground="#A99E9C" VerticalAlignment="Center" />
+                                    <TextBlock Text="Modo da barra" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="HomeModeDetailText" Grid.Column="1" Text="Acrylic" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </Grid>
-                                <Rectangle Height="1" Fill="#454040" />
+                                <Rectangle Height="1" Fill="{StaticResource DividerBrush}" />
                                 <Grid Padding="0,10">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <PathIcon Foreground="{StaticResource SystemAccentBrush}" Width="12" Height="12"
-                                              Data="M1,6 L2.5,4.5 L4.7,6.7 L9.5,1.8 L11,3.3 L4.7,9.8 Z" />
-                                    <TextBlock Grid.Column="1" Text="Compatibilidade" Foreground="#D9D1CF" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="CompatibilityText" Grid.Column="2" Text="Pronto" Foreground="#A99E9C" VerticalAlignment="Center" />
+                                    <TextBlock Text="Compatibilidade" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="CompatibilityText" Grid.Column="1" Text="Pronto" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </Grid>
                             </StackPanel>
                         </Border>
 
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource QuickCardButtonStyle}" Click="QuickMode_Click" Tag="blur">
-                                <StackPanel Spacing="5">
-                                    <TextBlock Text="Blur" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Desfoque suave" FontSize="12" Foreground="#A99E9C" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="1" Style="{StaticResource QuickCardButtonStyle}" Click="QuickMode_Click" Tag="acrylic">
-                                <StackPanel Spacing="5">
-                                    <TextBlock Text="Acrylic" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Transparência com textura" FontSize="12" Foreground="#A99E9C" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="2" Style="{StaticResource QuickCardButtonStyle}" Click="QuickMode_Click" Tag="clear">
-                                <StackPanel Spacing="5">
-                                    <TextBlock Text="Transparente" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Revela o papel de parede" FontSize="12" Foreground="#A99E9C" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="3" Style="{StaticResource QuickCardButtonStyle}" Click="QuickMode_Click" Tag="lightliquidglass">
-                                <StackPanel Spacing="5">
-                                    <TextBlock Text="Light Liquid Glass" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Vidro translúcido claro" FontSize="12" Foreground="#A99E9C" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="4" Style="{StaticResource QuickCardButtonStyle}" Click="QuickMode_Click" Tag="darkliquidglass">
-                                <StackPanel Spacing="5">
-                                    <TextBlock Text="Dark Liquid Glass" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Vidro escuro com brilho" FontSize="12" Foreground="#A99E9C" />
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-
-                        <Button Content="Personalizar aparência" HorizontalAlignment="Left" Click="AppearanceNavButton_Click" />
-                        <TextBlock x:Name="WarningText" TextWrapping="Wrap" Foreground="#E9B872" FontSize="12" />
+                        <Button Content="Personalizar aparência" HorizontalAlignment="Left" Padding="16,8"
+                                Background="{StaticResource SystemAccentBrush}" Foreground="#141418"
+                                FontWeight="SemiBold" CornerRadius="8" BorderThickness="0"
+                                Click="AppearanceNavButton_Click" />
+                        <TextBlock x:Name="WarningText" TextWrapping="Wrap" Foreground="#F0B464" FontSize="12" />
                     </StackPanel>
                 </Grid>
 
+                <!-- 2. APPEARANCE PAGE -->
                 <Grid x:Name="AppearancePage" Visibility="Collapsed">
-                    <StackPanel Spacing="18">
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="Aparência" FontSize="28" FontWeight="SemiBold" />
-                            <TextBlock Text="Escolha o estilo e ajuste a tonalidade da barra." Foreground="#A99E9C" />
+                    <StackPanel Spacing="20">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Aparência" FontSize="28" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Escolha o estilo e ajuste a tonalidade da barra." Foreground="{StaticResource TextSecondaryBrush}" />
                         </StackPanel>
 
+                        <!-- Style Selection Card -->
                         <Border Style="{StaticResource CardStyle}">
-                            <StackPanel Spacing="12">
+                            <StackPanel Spacing="14">
                                 <TextBlock Text="Estilo da barra de tarefas" Style="{StaticResource SectionTitleStyle}" />
-                                <ComboBox x:Name="ModeSelector" SelectionChanged="ModeSelector_SelectionChanged">
+                                <ComboBox x:Name="ModeSelector" MinWidth="300" SelectionChanged="ModeSelector_SelectionChanged">
                                     <ComboBoxItem Content="Normal (padrão do Windows)" Tag="normal" />
                                     <ComboBoxItem Content="Transparente" Tag="clear" />
                                     <ComboBoxItem Content="Blur (desfoque)" Tag="blur" />
@@ -230,97 +379,122 @@
                                 </ComboBox>
                                 <TextBlock x:Name="ModeDescriptionText"
                                            Text="Fundo translúcido com desfoque e textura Acrylic para a taskbar."
-                                           Foreground="#A99E9C" TextWrapping="Wrap" FontSize="12" />
+                                           Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" FontSize="13" />
+
                                 <StackPanel x:Name="LiquidGlassTonePanel" Spacing="8" Visibility="Collapsed">
                                     <TextBlock Text="Tonalidade Liquid Glass" Style="{StaticResource SectionTitleStyle}" />
-                                    <ComboBox x:Name="LiquidGlassToneSelector"
+                                    <ComboBox x:Name="LiquidGlassToneSelector" MinWidth="200"
                                               SelectionChanged="LiquidGlassToneSelector_SelectionChanged">
                                         <ComboBoxItem Content="Escuro" Tag="dark" />
                                         <ComboBoxItem Content="Claro" Tag="light" />
                                     </ComboBox>
                                     <TextBlock Text="Selecione o tom escuro ou claro do Liquid Glass."
-                                               Foreground="#A99E9C" TextWrapping="Wrap" FontSize="12" />
+                                               Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" FontSize="12" />
                                 </StackPanel>
                                 <TextBlock x:Name="LiquidGlassCompatibilityWarning"
                                            Text="Liquid Glass requer Windows 11 22H2 ou posterior. No Windows 10, o TricBar usa Acrylic como alternativa."
-                                           Foreground="#E9B872" TextWrapping="Wrap" FontSize="12"
+                                           Foreground="#F0B464" TextWrapping="Wrap" FontSize="12"
                                            Visibility="Collapsed" />
                             </StackPanel>
                         </Border>
 
+                        <!-- Tint and Opacity Card -->
                         <Border Style="{StaticResource CardStyle}">
-                            <StackPanel Spacing="14">
+                            <StackPanel Spacing="16">
                                 <TextBlock Text="Tonalidade e opacidade" Style="{StaticResource SectionTitleStyle}" />
-                                <TextBlock Text="O cinza neutro se mistura ao fundo nos modos Blur e Acrylic." Foreground="#A99E9C" TextWrapping="Wrap" />
-                                <Grid ColumnSpacing="10">
+                                <TextBlock Text="O cinza neutro se mistura ao fundo nos modos Blur e Acrylic." Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+
+                                <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="32" />
-                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="34" />
+                                        <ColumnDefinition Width="120" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border x:Name="ColorPreview" Width="28" Height="28" BorderBrush="#807875" BorderThickness="1" CornerRadius="5" />
-                                    <TextBox x:Name="HexColor" Grid.Column="1" MaxLength="7" PlaceholderText="#RRGGBB" TextChanged="HexColor_TextChanged" />
-                                    <Button Grid.Column="2" Content="Escolher cor" Click="PickColor_Click" />
-                                    <StackPanel x:Name="Presets" Grid.Column="3" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Right">
-                                        <Button Width="34" Content="" Tag="808080" Background="#808080" Click="Preset_Click" />
-                                        <Button Width="34" Content="" Tag="505050" Background="#505050" Click="Preset_Click" />
-                                        <Button Width="34" Content="" Tag="C0C0C0" Background="#C0C0C0" Click="Preset_Click" />
-                                        <Button Width="34" Content="" Tag="0078D4" Background="#0078D4" Click="Preset_Click" />
-                                        <Button Width="34" Content="" Tag="8E44AD" Background="#8E44AD" Click="Preset_Click" />
+                                    <Border x:Name="ColorPreview" Width="30" Height="30" BorderBrush="#555562" BorderThickness="1" CornerRadius="6" VerticalAlignment="Center" />
+                                    <TextBox x:Name="HexColor" Grid.Column="1" MaxLength="7" PlaceholderText="#RRGGBB" TextChanged="HexColor_TextChanged" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Content="Escolher cor" Click="PickColor_Click" VerticalAlignment="Center" />
+                                    <StackPanel x:Name="Presets" Grid.Column="3" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="808080" Background="#808080" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="E5E5E5" Background="#E5E5E5" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="505050" Background="#505050" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="0D1117" Background="#0D1117" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="C0C0C0" Background="#C0C0C0" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="0078D4" Background="#0078D4" Click="Preset_Click" />
+                                        <Button Style="{StaticResource SwatchStyle}" Tag="8E44AD" Background="#8E44AD" Click="Preset_Click" />
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock x:Name="OpacityLabel" Text="Opacidade da cor: 60%" Foreground="#D9D1CF" />
-                                <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OpacitySlider_ValueChanged" />
-                            </StackPanel>
-                        </Border>
 
-                        <Border Style="{StaticResource CardStyle}" Padding="14">
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Prévia da tonalidade" FontWeight="SemiBold" />
-                                    <TextBlock Text="A prévia mostra a cor escolhida; o efeito aparece na barra de tarefas." Foreground="#A99E9C" FontSize="12" TextWrapping="Wrap" />
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="OpacityLabel" Text="Opacidade da cor: 60%" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" />
+                                    <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OpacitySlider_ValueChanged" />
                                 </StackPanel>
-                                <Border x:Name="TonalPreview" Grid.Column="1" Width="52" Height="36" CornerRadius="6"
-                                        BorderBrush="#807875" BorderThickness="1" />
-                            </Grid>
+
+                                <Rectangle Height="1" Fill="{StaticResource DividerBrush}" />
+                                <Button Content="Restaurar padrão" Click="RestoreDefault_Click" HorizontalAlignment="Left"
+                                        Padding="12,6" BorderThickness="1" CornerRadius="7" />
+                            </StackPanel>
                         </Border>
                     </StackPanel>
                 </Grid>
 
+                <!-- 3. SETTINGS PAGE -->
                 <Grid x:Name="SettingsPage" Visibility="Collapsed">
-                    <StackPanel Spacing="18">
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="Configurações" FontSize="28" FontWeight="SemiBold" />
-                            <TextBlock Text="Inicialização e comportamento do TricBar." Foreground="#A99E9C" />
+                    <StackPanel Spacing="20">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Configurações" FontSize="28" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Inicialização e comportamento do TricBar." Foreground="{StaticResource TextSecondaryBrush}" />
                         </StackPanel>
 
+                        <!-- System Behavior Options -->
                         <Border Style="{StaticResource CardStyle}">
-                            <StackPanel Spacing="14">
+                            <StackPanel Spacing="16">
                                 <TextBlock Text="Opções" Style="{StaticResource SectionTitleStyle}" />
                                 <CheckBox x:Name="StartupCheck" Content="Iniciar o TricBar com o Windows" Checked="StartupCheck_Changed" Unchecked="StartupCheck_Changed" />
-                                <Button x:Name="OpenConfigButton" Content="Abrir %APPDATA%\TricBar\config.ini" Click="OpenConfigButton_Click" HorizontalAlignment="Left" />
-                                <Rectangle Height="1" Fill="#454040" />
+                                <Rectangle Height="1" Fill="{StaticResource DividerBrush}" />
                                 <CheckBox x:Name="CenterCheck" Content="Centralizar ícones da barra (Windows 10)" Checked="CenterCheck_Changed" Unchecked="CenterCheck_Changed" />
+                                <Rectangle Height="1" Fill="{StaticResource DividerBrush}" />
                             </StackPanel>
                         </Border>
 
+                        <!-- Engine Status and Control -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel Spacing="14">
+                                <TextBlock Text="Estado do TricBar" Style="{StaticResource SectionTitleStyle}" />
+                                <TextBlock x:Name="StatusText" Text="Verificando..." Foreground="{StaticResource TextSecondaryBrush}" />
+                                <Button x:Name="SettingsToggleButton" Content="Iniciar TricBar" HorizontalAlignment="Left"
+                                        Padding="16,8" Background="{StaticResource SystemAccentBrush}" Foreground="#141418"
+                                        FontWeight="SemiBold" CornerRadius="8" BorderThickness="0"
+                                        Click="ToggleEngine_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- About -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Estado do TricBar" Style="{StaticResource SectionTitleStyle}" />
-                                <TextBlock x:Name="StatusText" Text="Verificando..." Foreground="#A99E9C" />
-                                <Button x:Name="SettingsToggleButton" Content="Iniciar TricBar" HorizontalAlignment="Left" Click="ToggleEngine_Click" />
+                                <TextBlock Text="Sobre" Style="{StaticResource SectionTitleStyle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Image x:Name="AboutLogo" Width="34" Height="34" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="TricBar" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock Text="Versão 1.3.0" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Text="Configurações salvas automaticamente em %APPDATA%\TricBar\config.ini."
+                                           FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button Content="Repositório no GitHub" Click="GitHubButton_Click"
+                                            Padding="12,6" BorderThickness="1" CornerRadius="7" HorizontalAlignment="Left" />
+                                    <Button Content="Abrir arquivo de configuração" Click="OpenConfigButton_Click"
+                                            Padding="12,6" BorderThickness="1" CornerRadius="7" HorizontalAlignment="Left" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
                         <Border x:Name="CompatibilityCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Compatibilidade" Style="{StaticResource SectionTitleStyle}" />
-                                <TextBlock x:Name="SettingsWarningText" TextWrapping="Wrap" Foreground="#E9B872" />
+                                <TextBlock x:Name="SettingsWarningText" TextWrapping="Wrap" Foreground="#F0B464" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

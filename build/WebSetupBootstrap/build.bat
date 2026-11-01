@@ -17,7 +17,7 @@ if not exist obj mkdir obj
 if not exist ..\..\dist mkdir ..\..\dist
 rc /nologo /fo obj\TricBarWebSetup.res TricBarWebSetup.rc
 if errorlevel 1 exit /b 1
-cl /nologo /std:c++17 /EHsc /O2 /MT /DUNICODE /D_UNICODE /Fo.\obj\ TricBarWebSetup.cpp /Fe:bin\TricBar-v2-WebSetup.exe /link obj\TricBarWebSetup.res urlmon.lib shell32.lib ole32.lib user32.lib
+cl /nologo /std:c++17 /EHsc /O2 /MT /utf-8 /DUNICODE /D_UNICODE /Fo.\obj\ TricBarWebSetup.cpp /Fe:bin\TricBar-v2-WebSetup.exe /link obj\TricBarWebSetup.res urlmon.lib shell32.lib ole32.lib user32.lib gdi32.lib comctl32.lib dwmapi.lib /SUBSYSTEM:WINDOWS
 if errorlevel 1 exit /b 1
 copy /Y bin\TricBar-v2-WebSetup.exe ..\..\dist\TricBar-v2-WebSetup.exe >nul
 if errorlevel 1 exit /b 1

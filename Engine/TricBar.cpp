@@ -107,6 +107,7 @@ Config g_config;
 FILETIME g_configStamp{};
 bool g_hasConfigStamp;
 UINT g_reloadMessage;
+UINT g_taskbarCreatedMessage;
 int g_windowsBuild;
 std::wstring g_tapPath;
 std::wstring g_tooltipSuffix;
@@ -267,7 +268,18 @@ bool TaskbarsStale()
     if (!g_taskbarCount) return true;
     for (int i = 0; i < g_taskbarCount; ++i)
         if (!IsWindow(g_taskbars[i])) return true;
-    return false;
+    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (primary != g_taskbars[0]) return true;
+    int currentCount = primary ? 1 : 0;
+    HWND cur = nullptr;
+    while (currentCount < kMaxTaskbars &&
+        (cur = FindWindowExW(nullptr, cur, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr)
+    {
+        if (currentCount < g_taskbarCount && g_taskbars[currentCount] != cur)
+            return true;
+        currentCount++;
+    }
+    return currentCount != g_taskbarCount;
 }
 
 void SetAccent(HWND hwnd, int state, uint32_t color)
@@ -499,6 +511,7 @@ void EnsureTap()
         g_tapPid = pid;
         ResetEvent(g_applied);
         g_tapAttempts = 0;
+        g_tapInjections = 0;
         g_nextTapAttempt = 0;
     }
     if (WaitForSingleObject(g_applied, 0) == WAIT_OBJECT_0)
@@ -508,7 +521,15 @@ void EnsureTap()
     }
     if (g_tapAttempts >= 5 || g_tapInjections >= 8 || GetTickCount64() < g_nextTapAttempt)
     {
-        if (g_tapAttempts >= 5 || g_tapInjections >= 8) g_tooltipSuffix = L" - falha ao aplicar";
+        if (g_tapAttempts >= 5 || g_tapInjections >= 8)
+        {
+            g_tooltipSuffix = L" - falha ao aplicar";
+            if (GetTickCount64() >= g_nextTapAttempt + 60000)
+            {
+                g_tapAttempts = 4;
+                g_nextTapAttempt = GetTickCount64() + 5000;
+            }
+        }
         return;
     }
     if (InterlockedCompareExchange(&g_tapBusy, 1, 0) != 0) return;
@@ -614,7 +635,7 @@ NOTIFYICONDATAW MakeTrayData()
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     data.uCallbackMessage = kWmTray;
     data.hIcon = g_trayIcon ? g_trayIcon : LoadIconW(nullptr, IDI_APPLICATION);
-    swprintf_s(data.szTip, L"TricBar 1.1%s", g_tooltipSuffix.c_str());
+    swprintf_s(data.szTip, L"TricBar 1.3%s", g_tooltipSuffix.c_str());
     return data;
 }
 
@@ -631,7 +652,6 @@ void ExitEngine()
     KillTimer(g_window, kKeepAliveTimer);
     KillTimer(g_window, kCenterTimer);
     if (g_eventHook) UnhookWinEvent(g_eventHook);
-    ApplyAccent();
     if (g_windowsBuild < 22000) RestoreTaskbarPosition();
     if (g_active) ResetEvent(g_active);
     if (g_uninstallAccentHooks) g_uninstallAccentHooks();
@@ -651,12 +671,29 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     if (g_reloadMessage && message == g_reloadMessage)
     {
         g_hasConfigStamp = false;
+        g_tapAttempts = 0;
+        g_tapInjections = 0;
+        g_nextTapAttempt = 0;
         ReadConfig();
+        ApplySettings();
+        return 0;
+    }
+    if (g_taskbarCreatedMessage && message == g_taskbarCreatedMessage)
+    {
+        RefreshTaskbars();
+        EnsureTrayIcon();
+        g_tapAttempts = 0;
+        g_tapInjections = 0;
+        g_nextTapAttempt = 0;
         ApplySettings();
         return 0;
     }
     switch (message)
     {
+    case WM_DISPLAYCHANGE:
+        RefreshTaskbars();
+        ApplySettings();
+        return 0;
     case kWmTray:
         if (lParam == WM_RBUTTONUP) ShowMenu();
         else if (lParam == WM_LBUTTONDBLCLK) OpenLauncher();
@@ -682,9 +719,9 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             EnsureTap();
             EnsureLegacyHook();
             {
-                // a cada ~30 s devolve ao sistema as paginas ociosas (so mexe no numero residente)
+                // a cada ~60 s devolve ao sistema as paginas ociosas (so mexe no numero residente)
                 static int keepAliveTicks = 0;
-                if (keepAliveTicks++ % 20 == 0)
+                if (++keepAliveTicks % 40 == 0)
                     SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
             }
             if (g_windowsBuild < 22000 && g_config.center)
@@ -734,6 +771,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     g_setComposition = reinterpret_cast<SetWindowCompositionAttributeFn>(
         GetProcAddress(user32, "SetWindowCompositionAttribute"));
     g_reloadMessage = RegisterWindowMessageW(kReloadMessage);
+    g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
     LoadLegacyHook();
     if (g_windowsBuild >= 22621) g_tapPath = PrepareHookDll();
     ReadConfig();
@@ -749,8 +787,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
         HWND_MESSAGE, nullptr, instance, nullptr);
     if (!g_window) return static_cast<int>(GetLastError());
 
+    const int iconMetricX = GetSystemMetrics(SM_CXSMICON);
+    const int iconMetricY = GetSystemMetrics(SM_CYSMICON);
     g_trayIcon = static_cast<HICON>(LoadImageW(
-        instance, MAKEINTRESOURCEW(IDI_TRICBAR_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        instance, MAKEINTRESOURCEW(IDI_TRICBAR_ICON), IMAGE_ICON,
+        iconMetricX > 0 ? iconMetricX : 16,
+        iconMetricY > 0 ? iconMetricY : 16,
+        0));
     auto trayData = MakeTrayData();
     Shell_NotifyIconW(NIM_ADD, &trayData);
     ApplySettings();

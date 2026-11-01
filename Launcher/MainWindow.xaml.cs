@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Dispatching;
 using Microsoft.Win32;
@@ -12,7 +13,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Windows.Foundation;
 using Windows.UI;
-using Windows.UI.ViewManagement;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
             ["Sua barra de tarefas, do seu jeito."] = "Your taskbar, your way.",
             ["ESTADO DO MOTOR"] = "ENGINE STATUS",
             ["APARÊNCIA ATUAL"] = "CURRENT APPEARANCE",
+            ["Modos Rápidos"] = "Quick Modes",
             ["Sistema operacional"] = "Operating system",
             ["Modo da barra"] = "Taskbar mode",
             ["Compatibilidade"] = "Compatibility",
@@ -52,13 +53,17 @@ public sealed partial class MainWindow : Window
             ["Escolha o estilo e ajuste a tonalidade da barra."] = "Choose a style and adjust the taskbar tint.",
             ["Estilo da barra de tarefas"] = "Taskbar style",
             ["Normal (padrão do Windows)"] = "Normal (Windows default)",
+            ["Normal (Windows)"] = "Normal (Windows)",
             ["Blur (desfoque)"] = "Blur",
             ["Liquid Glass"] = "Liquid Glass",
+            ["Liquid Glass (Flutuante)"] = "Liquid Glass (Floating)",
             ["Tonalidade Liquid Glass"] = "Liquid Glass tone",
             ["Escuro"] = "Dark",
             ["Claro"] = "Light",
             ["Liquid Glass (Escuro)"] = "Dark Liquid Glass",
             ["Liquid Glass (Claro)"] = "Light Liquid Glass",
+            ["Vidro translúcido flutuante claro"] = "Light floating translucent glass",
+            ["Vidro translúcido flutuante escuro"] = "Dark floating translucent glass",
             ["Selecione o tom escuro ou claro do Liquid Glass."] =
                 "Choose the dark or light Liquid Glass tone.",
             ["Usa o visual padrão do Windows."] = "Uses the default Windows appearance.",
@@ -76,9 +81,6 @@ public sealed partial class MainWindow : Window
                 "Neutral gray blends into the background in Blur and Acrylic modes.",
             ["Escolher cor"] = "Choose color",
             ["Opacidade da cor:"] = "Color opacity:",
-            ["Prévia da tonalidade"] = "Tint preview",
-            ["A prévia mostra a cor escolhida; o efeito aparece na barra de tarefas."] =
-                "The preview shows your selected color; the effect appears on the taskbar.",
             ["Inicialização e comportamento do TricBar."] = "Startup and TricBar behavior.",
             ["Opções"] = "Options",
             ["Iniciar o TricBar com o Windows"] = "Start TricBar with Windows",
@@ -108,7 +110,14 @@ public sealed partial class MainWindow : Window
                 "Could not change the startup setting.",
             ["Selecionar"] = "Select",
             ["Cancelar"] = "Cancel",
-            ["OK"] = "OK"
+            ["OK"] = "OK",
+            ["Sobre"] = "About",
+            ["Versão 1.3.0"] = "Version 1.3.0",
+            ["Restaurar padrão"] = "Restore default",
+            ["Repositório no GitHub"] = "GitHub repository",
+            ["Configurações salvas automaticamente em %APPDATA%\\TricBar\\config.ini."] =
+                "Settings are saved automatically to %APPDATA%\\TricBar\\config.ini.",
+            ["Não foi possível abrir o repositório."] = "Could not open the repository."
         };
 
     private readonly string _configDirectory = Path.Combine(
@@ -116,11 +125,9 @@ public sealed partial class MainWindow : Window
     private readonly string _configPath;
     private readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly UISettings _uiSettings = new();
     private DispatcherQueue _dispatcherQueue = null!;
     private AppWindow _appWindow = null!;
-    private Color _accentColor;
-    private int _rgb;
+    private Color _accentColor;    private int _rgb;
     private bool _loading;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "FindWindowExW")]
@@ -131,6 +138,8 @@ public sealed partial class MainWindow : Window
     private static extern bool PostMessageW(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, uint processId);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -167,45 +176,63 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         SystemBackdrop = new DesktopAcrylicBackdrop();
-        var windowId = Win32Interop.GetWindowIdFromWindow(WindowNative.GetWindowHandle(this));
+        IntPtr hwnd = WindowNative.GetWindowHandle(this);
+        var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
         if (_appWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.SetBorderAndTitleBar(true, true);
             presenter.IsMinimizable = true;
             presenter.IsMaximizable = true;
-            presenter.IsResizable = false;
+            presenter.IsResizable = true;
         }
-        _appWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "icon.ico"));
-        _appWindow.Resize(new SizeInt32(1000, 700));
-        _appWindow.Title = string.Empty;
 
-        Color baseTint = Color.FromArgb(170, 12, 15, 21);
-        Color darkerTint = Color.FromArgb(185, 9, 12, 17);
-        Color hoverTint = Color.FromArgb(190, 20, 23, 30);
-        Color pressedTint = Color.FromArgb(205, 26, 29, 37);
+        string iconPath = Path.Combine(AppContext.BaseDirectory, "icon.ico");
+        if (File.Exists(iconPath))
+            _appWindow.SetIcon(iconPath);
 
-        _appWindow.TitleBar.BackgroundColor = baseTint;
-        _appWindow.TitleBar.InactiveBackgroundColor = darkerTint;
-        _appWindow.TitleBar.ForegroundColor = Color.FromArgb(255, 229, 229, 232);
-        _appWindow.TitleBar.InactiveForegroundColor = Color.FromArgb(165, 229, 229, 232);
-        _appWindow.TitleBar.ButtonBackgroundColor = baseTint;
-        _appWindow.TitleBar.ButtonInactiveBackgroundColor = darkerTint;
-        _appWindow.TitleBar.ButtonForegroundColor = Color.FromArgb(255, 229, 229, 232);
+        uint dpi = GetDpiForWindow(hwnd);
+        float scale = (dpi > 0 ? dpi : 96f) / 96f;
+        _appWindow.Resize(new SizeInt32((int)(980 * scale), (int)(680 * scale)));
+        _appWindow.Title = "TricBar";
+
+        // Barra de título limpa: sem ícone e sem texto no topo da janela.
+        // O conteúdo do app passa por trás; "TricBar" continua sendo usado
+        // apenas como título da barra de tarefas (via Title/_appWindow.Title).
+        ExtendsContentIntoTitleBar = true;
+
+        Color hoverTint = Color.FromArgb(220, 36, 36, 46);
+        Color pressedTint = Color.FromArgb(240, 48, 48, 60);
+
+        _appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
+        _appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _appWindow.TitleBar.ButtonForegroundColor = Color.FromArgb(255, 235, 235, 240);
         _appWindow.TitleBar.ButtonHoverForegroundColor = Color.FromArgb(255, 255, 255, 255);
         _appWindow.TitleBar.ButtonPressedForegroundColor = Color.FromArgb(255, 255, 255, 255);
         _appWindow.TitleBar.ButtonHoverBackgroundColor = hoverTint;
         _appWindow.TitleBar.ButtonPressedBackgroundColor = pressedTint;
-        _uiSettings.ColorValuesChanged += (_, _) => _dispatcherQueue.TryEnqueue(ApplySystemAccent);
+
         ApplySystemAccent();
         _configPath = Path.Combine(_configDirectory, ConfigFileName);
-        Title = string.Empty;
+        Title = "TricBar";
         _saveTimer.Tick += (_, _) =>
         {
             _saveTimer.Stop();
             SaveConfig();
         };
         _statusTimer.Tick += (_, _) => UpdateStatus();
+    }
+
+    private void LoadLogoImages()
+    {
+        // A logo (tricbartransparent.png) é copiada para a pasta do executável
+        // pelo projeto (Content). Em apps unpackaged, ms-appx:/// não resolve
+        // de forma confiável, então carregamos o caminho real do arquivo.
+        string logoPath = Path.Combine(AppContext.BaseDirectory, "tricbartransparent.png");
+        if (!File.Exists(logoPath)) return;
+        ImageSource bitmap = new BitmapImage(new Uri(logoPath, UriKind.Absolute));
+        BrandLogo.Source = bitmap;
+        AboutLogo.Source = bitmap;
     }
 
     private static string T(string portuguese) =>
@@ -239,13 +266,14 @@ public sealed partial class MainWindow : Window
 
     private void Content_Loaded(object sender, RoutedEventArgs e)
     {
+        LoadLogoImages();
         ApplyLocalization(RootGrid);
         foreach (ComboBoxItem item in ModeSelector.Items)
             if (item.Content is string text)
                 item.Content = T(text);
         foreach (ComboBoxItem item in LiquidGlassToneSelector.Items)
-        if (item.Content is string text)
-            item.Content = T(text);
+            if (item.Content is string text)
+                item.Content = T(text);
         LoadConfig();
         ShowPage(HomePage);
         UpdateEnabled();
@@ -319,8 +347,8 @@ public sealed partial class MainWindow : Window
                         case "mode": mode = value.ToLowerInvariant(); break;
                         case "color":
                             string hex = value.TrimStart('#');
-                            if (hex.Length == 6 && int.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int parsed))
-                                color = parsed;
+                            if (hex.Length == 6 && uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint parsed))
+                                color = (int)(parsed & 0xFFFFFF);
                             break;
                         case "opacity":
                             if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedOpacity))
@@ -330,7 +358,11 @@ public sealed partial class MainWindow : Window
                     }
                 }
             }
-            if (mode is "lightliquidglass" or "mica" or "macos")
+            if (mode == "macos")
+            {
+                mode = "acrylic";
+            }
+            else if (mode is "lightliquidglass" or "mica")
             {
                 mode = "liquidglass";
                 liquidGlassTone = "light";
@@ -350,7 +382,6 @@ public sealed partial class MainWindow : Window
             HexColor.Text = FormatColor(_rgb);
             SetPreview(_rgb);
             OpacitySlider.Value = opacity;
-            UpdateTonalPreview();
             OpacityLabel.Text = $"{T("Opacidade da cor:")} {opacity}%";
             CenterCheck.IsChecked = center;
             CenterCheck.IsEnabled = Environment.OSVersion.Version.Build < 22000;
@@ -445,7 +476,7 @@ public sealed partial class MainWindow : Window
     {
         bool running = FindEngine() != IntPtr.Zero;
         StatusText.Text = running ? T("TricBar em execução") : T("TricBar parado");
-        SidebarStatusText.Text = running ? T("TricBar está ativo") : T("TricBar está parado");
+        SidebarStatusText.Text = running ? T("Em execução") : T("Parado");
         HomeEngineStatus.Text = running ? T("Em execução") : T("Parado");
         EngineStatusDot.Fill = new SolidColorBrush(running
             ? Color.FromArgb(255, 91, 190, 130)
@@ -520,7 +551,6 @@ public sealed partial class MainWindow : Window
     {
         ColorPreview.Background = new SolidColorBrush(Color.FromArgb(
             255, (byte)(color >> 16), (byte)(color >> 8), (byte)color));
-        UpdateTonalPreview();
         HomeColorPreview.Background = new SolidColorBrush(Color.FromArgb(
             255, (byte)(color >> 16), (byte)(color >> 8), (byte)color));
     }
@@ -581,21 +611,27 @@ public sealed partial class MainWindow : Window
         AppearancePage.Visibility = page == AppearancePage ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = page == SettingsPage ? Visibility.Visible : Visibility.Collapsed;
         var selectedBackground = new SolidColorBrush(Color.FromArgb(
-            0x55, _accentColor.R, _accentColor.G, _accentColor.B));
+            0x40, _accentColor.R, _accentColor.G, _accentColor.B));
         var transparentBackground = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
         HomeNavButton.Background = page == HomePage ? selectedBackground : transparentBackground;
         AppearanceNavButton.Background = page == AppearancePage ? selectedBackground : transparentBackground;
         SettingsNavButton.Background = page == SettingsPage ? selectedBackground : transparentBackground;
+        NavIndicatorHome.Visibility = page == HomePage ? Visibility.Visible : Visibility.Collapsed;
+        NavIndicatorAppearance.Visibility = page == AppearancePage ? Visibility.Visible : Visibility.Collapsed;
+        NavIndicatorSettings.Visibility = page == SettingsPage ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    // Paleta fixa da marca: fundo preto, acento em amarelo (raio da logo)
+    // e azul como cor secundária (ícones e detalhes).
+    private static readonly Color BrandAccentColor = Color.FromArgb(255, 255, 214, 10);
 
     private void ApplySystemAccent()
     {
-        _accentColor = _uiSettings.GetColorValue(UIColorType.Accent);
-        ((SolidColorBrush)RootGrid.Resources["SystemAccentBrush"]).Color = _accentColor;
-        _appWindow.TitleBar.ButtonHoverBackgroundColor = Color.FromArgb(
-            0xCC, _accentColor.R, _accentColor.G, _accentColor.B);
-        _appWindow.TitleBar.ButtonPressedBackgroundColor = Color.FromArgb(
-            0xFF, _accentColor.R, _accentColor.G, _accentColor.B);
+        _accentColor = BrandAccentColor;
+        ((SolidColorBrush)RootGrid.Resources["SystemAccentBrush"]).Color = BrandAccentColor;
+        // Botões min/max/close: hover e pressed neutros sobre o fundo escuro
+        _appWindow.TitleBar.ButtonHoverBackgroundColor = Color.FromArgb(0x33, 255, 255, 255);
+        _appWindow.TitleBar.ButtonPressedBackgroundColor = Color.FromArgb(0x66, 255, 255, 255);
         if (HomePage is not null && HomePage.Visibility == Visibility.Visible)
             ShowPage(HomePage);
         else if (AppearancePage is not null && AppearancePage.Visibility == Visibility.Visible)
@@ -635,10 +671,10 @@ public sealed partial class MainWindow : Window
     {
         if (_loading) return;
         string value = HexColor.Text.Trim().TrimStart('#');
-        if (value.Length == 6 && int.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int color))
+        if (value.Length == 6 && uint.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint color))
         {
-            _rgb = color;
-            SetPreview(color);
+            _rgb = (int)(color & 0xFFFFFF);
+            SetPreview(_rgb);
             ScheduleSave();
         }
     }
@@ -647,16 +683,7 @@ public sealed partial class MainWindow : Window
     {
         if (OpacityLabel is not null)
             OpacityLabel.Text = $"{T("Opacidade da cor:")} {(int)e.NewValue}%";
-        UpdateTonalPreview();
         ScheduleSave();
-    }
-
-    private void UpdateTonalPreview()
-    {
-        if (TonalPreview is null || OpacitySlider is null) return;
-        byte opacity = (byte)Math.Clamp((int)Math.Round(OpacitySlider.Value * 2.55), 0, 255);
-        TonalPreview.Background = new SolidColorBrush(Color.FromArgb(
-            opacity, (byte)(_rgb >> 16), (byte)(_rgb >> 8), (byte)_rgb));
     }
 
     private void CenterCheck_Changed(object sender, RoutedEventArgs e) => ScheduleSave();
@@ -681,8 +708,26 @@ public sealed partial class MainWindow : Window
     private void Preset_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string value } &&
-            int.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int color))
-            SetColor(color);
+            uint.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint color))
+            SetColor((int)(color & 0xFFFFFF));
+    }
+
+    private void RestoreDefault_Click(object sender, RoutedEventArgs e)
+    {
+        SetColor(0x808080);
+        OpacitySlider.Value = 60;
+    }
+
+    private void GitHubButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/superplexx/TricBar-v2") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ShowError(T("Não foi possível abrir o repositório."), ex);
+        }
     }
 
     private async void PickColor_Click(object sender, RoutedEventArgs e)
@@ -696,29 +741,52 @@ public sealed partial class MainWindow : Window
             CloseButtonText = T("Cancelar"),
             XamlRoot = Content.XamlRoot
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await ShowDialogAsync(dialog) == ContentDialogResult.Primary)
             SetColor((picker.Color.R << 16) | (picker.Color.G << 8) | picker.Color.B);
+    }
+
+    // O WinUI só permite um ContentDialog aberto por vez; abrir um segundo lança exceção
+    // (e nos métodos async void isso derrubava o app, por exemplo com falhas repetidas ao salvar).
+    private bool _dialogOpen;
+
+    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+    {
+        if (_dialogOpen) return ContentDialogResult.None;
+        _dialogOpen = true;
+        try
+        {
+            return await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            App.LogError($"Falha ao exibir diálogo: {ex}");
+            return ContentDialogResult.None;
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
     }
 
     private async void ShowMessage(string message)
     {
-        await new ContentDialog
+        await ShowDialogAsync(new ContentDialog
         {
             Title = "TricBar",
             Content = message,
             CloseButtonText = T("OK"),
             XamlRoot = Content.XamlRoot
-        }.ShowAsync();
+        });
     }
 
     private async void ShowError(string message, Exception exception)
     {
-        await new ContentDialog
+        await ShowDialogAsync(new ContentDialog
         {
             Title = "TricBar",
             Content = $"{message}\n{exception.Message}",
             CloseButtonText = T("OK"),
             XamlRoot = Content.XamlRoot
-        }.ShowAsync();
+        });
     }
 }

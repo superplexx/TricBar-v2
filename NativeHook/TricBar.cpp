@@ -1,4 +1,4 @@
-﻿// TricBar.cpp  ->  TricBar.dll
+// TricBar.cpp  ->  TricBar.dll
 //
 // DLL carregada DENTRO do explorer.exe pela infraestrutura de XAML Diagnostics
 // (InitializeXamlDiagnosticsEx), a mesma tecnica usada pelo TranslucentTB e pelo
@@ -64,7 +64,7 @@ static constexpr wchar_t kActiveEvent[]  = L"TricBar_Blur_Active";
 static constexpr wchar_t kAppliedEvent[] = L"TricBar_Blur_Applied";
 static constexpr char kCompositionFunction[] = "SetWindowCompositionAttribute";
 static constexpr wchar_t kTagMarker[]    = L"TricBar.Transparent";
-static constexpr wchar_t kVersion[]      = L"1.1.0";
+static constexpr wchar_t kVersion[]      = L"1.3.0";
 
 struct CompositionAttributeData
 {
@@ -101,6 +101,12 @@ static void Log(const wchar_t* fmt, ...)
     std::wstring directory = std::wstring(base) + L"\\TricBar";
     CreateDirectoryW(directory.c_str(), nullptr);
     std::wstring path = directory + L"\\blur.log";
+
+    // O log so cresce (um registro a cada mudanca de botoes/config): recomeca acima de 1 MiB.
+    WIN32_FILE_ATTRIBUTE_DATA logInfo{};
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &logInfo) &&
+        (logInfo.nFileSizeHigh != 0 || logInfo.nFileSizeLow > (1u << 20)))
+        DeleteFileW(path.c_str());
 
     wchar_t line[400]{};
     va_list ap;
