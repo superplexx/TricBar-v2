@@ -4,12 +4,16 @@
 #include <urlmon.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <appmodel.h>
 #include <dwmapi.h>
 #include <string>
 #include <filesystem>
 #include <fstream>
 #include <vector>
 #include <atomic>
+#include <iterator>
+#include <cwctype>
+#include <cwchar>
 
 #pragma comment(lib, "urlmon.lib")
 #pragma comment(lib, "shell32.lib")
@@ -18,6 +22,7 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "advapi32.lib")
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -59,6 +64,8 @@ namespace
     std::atomic<bool> g_failed{ false };
     std::atomic<bool> g_installStarted{ false };
     std::wstring g_failureMessage;
+    DWORD g_lastExitCode = 0;     // último código de saída de um processo filho
+    DWORD g_lastLaunchError = 0;  // GetLastError se o processo nem iniciou (ex.: 740 = precisa de admin)
 
     class DownloadProgressCallback : public IBindStatusCallback
     {
@@ -170,8 +177,27 @@ namespace
         return escaped;
     }
 
+    // Procura a pasta do runtime em Program Files\\dotnet (não depende do PATH).
+    bool HasDotNet8DesktopRuntimeFolder()
+    {
+        wchar_t programFiles[MAX_PATH] = {};
+        DWORD length = GetEnvironmentVariableW(L"ProgramFiles", programFiles, MAX_PATH);
+        if (length == 0 || length >= MAX_PATH)
+            return false;
+        std::error_code ec;
+        std::filesystem::path dir = std::filesystem::path(programFiles) / L"dotnet" / L"shared" / L"Microsoft.WindowsDesktop.App";
+        for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        {
+            if (it->path().filename().wstring().rfind(L"8.0.", 0) == 0)
+                return true;
+        }
+        return false;
+    }
+
     bool IsDotNetDesktopRuntimeInstalled()
     {
+        if (HasDotNet8DesktopRuntimeFolder())
+            return true;
         std::wstring tempFile = GetTempDirectory() + L"tricbar-dotnet-check.txt";
         std::wstring command = L"dotnet --list-runtimes > " + QuoteForCommandLine(tempFile) + L" 2>nul";
         _wsystem(command.c_str());
@@ -202,24 +228,12 @@ namespace
             SetWindowTextW(g_hwndDetail, detail);
         if (g_hwndProgress)
         {
-            LONG_PTR style = GetWindowLongPtrW(g_hwndProgress, GWL_STYLE);
-            if (marquee)
-            {
-                if (!(style & PBS_MARQUEE))
-                {
-                    SetWindowLongPtrW(g_hwndProgress, GWL_STYLE, style | PBS_MARQUEE);
-                    SendMessageW(g_hwndProgress, PBM_SETMARQUEE, TRUE, 30);
-                }
-            }
-            else
-            {
-                if (style & PBS_MARQUEE)
-                {
-                    SendMessageW(g_hwndProgress, PBM_SETMARQUEE, FALSE, 0);
-                    SetWindowLongPtrW(g_hwndProgress, GWL_STYLE, style & ~PBS_MARQUEE);
-                }
+            // A barra é própria (TricBarProgress): trata modo indeterminado e posição sozinha.
+            const bool isError = stage && wcsncmp(stage, L"Erro", 4) == 0;
+            SendMessageW(g_hwndProgress, PBM_SETSTATE, isError ? 2 /*PBST_ERROR*/ : 1 /*PBST_NORMAL*/, 0);
+            SendMessageW(g_hwndProgress, PBM_SETMARQUEE, marquee ? TRUE : FALSE, 0);
+            if (!marquee)
                 SendMessageW(g_hwndProgress, PBM_SETPOS, progressPercent, 0);
-            }
         }
     }
 
@@ -260,11 +274,17 @@ namespace
             &processInfo);
 
         if (!created)
+        {
+            g_lastLaunchError = GetLastError();
+            g_lastExitCode = 0;
             return false;
+        }
+        g_lastLaunchError = 0;
 
         WaitForSingleObject(processInfo.hProcess, INFINITE);
         DWORD exitCode = 0;
         GetExitCodeProcess(processInfo.hProcess, &exitCode);
+        g_lastExitCode = exitCode;
         CloseHandle(processInfo.hThread);
         CloseHandle(processInfo.hProcess);
         return exitCode == 0 || exitCode == 1641 || exitCode == 3010;
@@ -275,6 +295,8 @@ namespace
         UpdateUIStage(L"Etapa 1 de 4: Verificando .NET 8 Runtime...", L"Verificando instalação existente...", 0, true);
         if (IsDotNetDesktopRuntimeInstalled())
             return true;
+        g_lastExitCode = 0;
+        g_lastLaunchError = 0;
 
         std::wstring tempDir = GetTempDirectory();
         std::wstring installerPath = tempDir + L"windowsdesktop-runtime-win-x64.exe";
@@ -285,13 +307,40 @@ namespace
             return false;
 
         UpdateUIStage(L"Etapa 1 de 4: Instalando .NET 8 Runtime...", L"Instalando silenciosamente...", 100, true);
-        return RunHiddenProcess(installerPath, L"/install /quiet /norestart");
+        // 1638 = já há uma versão 8.0.x igual ou mais nova instalada (ok)
+        return RunHiddenProcess(installerPath, L"/install /quiet /norestart") || g_lastExitCode == 1638;
     }
 
+    // Consulta nativa (instantânea, sem PowerShell): há algum pacote instalado nessa família?
+    // Se requireX64, exige que ao menos um deles seja x64.
+    bool IsPackageFamilyInstalled(const wchar_t* familyName, bool requireX64)
+    {
+        UINT32 count = 0, bufferLength = 0;
+        LONG rc = GetPackagesByPackageFamily(familyName, &count, nullptr, &bufferLength, nullptr);
+        if (rc != ERROR_INSUFFICIENT_BUFFER || count == 0)
+            return false;
+        if (!requireX64)
+            return true;
+
+        std::vector<PWSTR> names(count);
+        std::vector<wchar_t> buffer(bufferLength);
+        rc = GetPackagesByPackageFamily(familyName, &count, names.data(), &bufferLength, buffer.data());
+        if (rc != ERROR_SUCCESS)
+            return false;
+        for (UINT32 i = 0; i < count; ++i)
+        {
+            if (names[i] && wcsstr(names[i], L"_x64_") != nullptr)
+                return true;
+        }
+        return false;
+    }
+
+    // Apps não empacotados precisam do Framework + Main do runtime. Apps da Microsoft Store costumam
+    // instalar só o Framework, então checar apenas ele dava falso positivo (e o TricBar não abria).
     bool IsWindowsAppRuntimeInstalled()
     {
-        std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; $package = Get-AppxPackage -AllUsers -Name 'Microsoft.WindowsAppRuntime.1.6' -ErrorAction SilentlyContinue; if ($package) { exit 0 } exit 1";
-        return RunHiddenProcess(L"powershell.exe", command);
+        return IsPackageFamilyInstalled(L"Microsoft.WindowsAppRuntime.1.6_8wekyb3d8bbwe", true) &&
+               IsPackageFamilyInstalled(L"MicrosoftCorporationII.WinAppRuntime.Main.1.6_8wekyb3d8bbwe", false);
     }
 
     bool InstallWindowsAppRuntimeIfNeeded()
@@ -299,6 +348,8 @@ namespace
         UpdateUIStage(L"Etapa 2 de 4: Verificando Windows App Runtime...", L"Verificando pacote do Windows App SDK...", 0, true);
         if (IsWindowsAppRuntimeInstalled())
             return true;
+        g_lastExitCode = 0;
+        g_lastLaunchError = 0;
 
         std::wstring tempDir = GetTempDirectory();
         std::wstring installerPath = tempDir + L"windowsappruntimeinstall-x64.exe";
@@ -312,14 +363,47 @@ namespace
         return RunHiddenProcess(installerPath, L"--quiet");
     }
 
+    std::wstring GetExtractLogPath()
+    {
+        wchar_t buffer[MAX_PATH] = {};
+        DWORD length = GetTempPathW(MAX_PATH, buffer);
+        std::wstring dir = (length == 0 || length >= MAX_PATH) ? std::wstring(L"C:\\Temp\\") : std::wstring(buffer);
+        return dir + L"tricbar-extract.log";
+    }
+
+    // Lê a primeira linha do log gravado pelo PowerShell (UTF-8, com ou sem BOM).
+    std::wstring ReadExtractLogMessage()
+    {
+        std::ifstream in(GetExtractLogPath(), std::ios::binary);
+        if (!in.is_open())
+            return L"";
+        std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xEF &&
+            static_cast<unsigned char>(bytes[1]) == 0xBB && static_cast<unsigned char>(bytes[2]) == 0xBF)
+            bytes.erase(0, 3);
+        size_t eol = bytes.find_first_of("\r\n");
+        if (eol != std::string::npos)
+            bytes.resize(eol);
+        if (bytes.empty())
+            return L"";
+        int len = MultiByteToWideChar(CP_UTF8, 0, bytes.c_str(), static_cast<int>(bytes.size()), nullptr, 0);
+        std::wstring wide(len, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, bytes.c_str(), static_cast<int>(bytes.size()), wide.data(), len);
+        return wide;
+    }
+
     bool ExpandZip(const std::wstring& archivePathRaw, const std::wstring& destinationRaw)
     {
         const std::wstring archivePath = EscapePowerShellSingleQuoted(archivePathRaw);
         const std::wstring destination = EscapePowerShellSingleQuoted(destinationRaw);
+        const std::wstring logPath = GetExtractLogPath();
+        DeleteFileW(logPath.c_str());
         std::wstring command =
-            L"-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; "
+            L"-NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; "
+            L"try { "
             L"if (-not (Test-Path -LiteralPath '" + destination + L"')) { New-Item -ItemType Directory -Path '" + destination + L"' -Force | Out-Null }; "
-            L"Expand-Archive -LiteralPath '" + archivePath + L"' -DestinationPath '" + destination + L"' -Force;";
+            L"Expand-Archive -LiteralPath '" + archivePath + L"' -DestinationPath '" + destination + L"' -Force "
+            L"} catch { $_.Exception.Message | Out-File -LiteralPath '" + EscapePowerShellSingleQuoted(logPath) + L"' -Encoding utf8; exit 1 }\"";
 
         return RunHiddenProcess(L"powershell.exe", command);
     }
@@ -403,7 +487,8 @@ namespace
         return hr == S_OK;
     }
 
-    bool CreateShortcut(const std::wstring& shortcutPathRaw, const std::wstring& targetPathRaw)
+    bool CreateShortcut(const std::wstring& shortcutPathRaw, const std::wstring& targetPathRaw,
+        const std::wstring& argumentsRaw = L"", const std::wstring& descriptionRaw = L"")
     {
         const std::wstring shortcutPath = EscapePowerShellSingleQuoted(shortcutPathRaw);
         const std::wstring targetPath = EscapePowerShellSingleQuoted(targetPathRaw);
@@ -413,6 +498,8 @@ namespace
             L"$WshShell = New-Object -ComObject WScript.Shell; "
             L"$Shortcut = $WshShell.CreateShortcut('" + shortcutPath + L"'); "
             L"$Shortcut.TargetPath = '" + targetPath + L"'; "
+            L"$Shortcut.Arguments = '" + EscapePowerShellSingleQuoted(argumentsRaw) + L"'; "
+            L"$Shortcut.Description = '" + EscapePowerShellSingleQuoted(descriptionRaw) + L"'; "
             L"$Shortcut.WorkingDirectory = '" + installDir + L"'; "
             L"$Shortcut.IconLocation = '" + installDir + L"\\icon.ico'; "
             L"$Shortcut.Save();";
@@ -427,6 +514,192 @@ namespace
         return std::filesystem::create_directories(installDirectory, ec) || ec.value() == 0;
     }
 
+    // ---- Registro em "Aplicativos instalados" (Windows 11) e desinstalação ----
+    constexpr wchar_t kUninstallKeyPath[] = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TricBar";
+    constexpr wchar_t kAppVersion[] = L"1.3.0";
+    constexpr wchar_t kSetupFileName[] = L"Setup.exe";
+
+    void SetRegString(HKEY key, const wchar_t* name, const std::wstring& value)
+    {
+        RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()),
+            static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    }
+
+    void SetRegDword(HKEY key, const wchar_t* name, DWORD value)
+    {
+        RegSetValueExW(key, name, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value), sizeof(value));
+    }
+
+    std::wstring GetDesktopDirectory()
+    {
+        wchar_t path[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, SHGFP_TYPE_CURRENT, path)))
+            return path;
+        return L"";
+    }
+
+    std::wstring GetStartMenuTricBarDirectory()
+    {
+        wchar_t path[MAX_PATH] = {};
+        ExpandEnvironmentStringsW(L"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\TricBar", path, MAX_PATH);
+        return path;
+    }
+
+    // Copia este próprio executável para a pasta de instalação como Setup.exe (é ele que desinstala).
+    bool CopySetupToInstallDirectory(const std::wstring& installDir, const std::wstring& setupPath)
+    {
+        wchar_t self[MAX_PATH] = {};
+        DWORD len = GetModuleFileNameW(nullptr, self, MAX_PATH);
+        if (len == 0 || len >= MAX_PATH)
+            return false;
+        std::error_code ec;
+        if (std::filesystem::equivalent(self, setupPath, ec))
+            return true;
+        return CopyFileW(self, setupPath.c_str(), FALSE) != 0;
+    }
+
+    bool RegisterUninstallEntry(const std::wstring& installDir, const std::wstring& setupPath)
+    {
+        HKEY key = nullptr;
+        LSTATUS status = RegCreateKeyExW(HKEY_LOCAL_MACHINE, kUninstallKeyPath, 0, nullptr, 0,
+            KEY_WRITE, nullptr, &key, nullptr);
+        if (status != ERROR_SUCCESS) // sem admin: registra só para o usuário atual
+            status = RegCreateKeyExW(HKEY_CURRENT_USER, kUninstallKeyPath, 0, nullptr, 0,
+                KEY_WRITE, nullptr, &key, nullptr);
+        if (status != ERROR_SUCCESS)
+            return false;
+
+        SYSTEMTIME st{};
+        GetLocalTime(&st);
+        wchar_t date[16] = {};
+        swprintf_s(date, L"%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+
+        unsigned long long totalBytes = 0;
+        std::error_code ec;
+        for (std::filesystem::recursive_directory_iterator it(installDir, ec), end; !ec && it != end; it.increment(ec))
+        {
+            std::error_code fileEc;
+            if (it->is_regular_file(fileEc))
+            {
+                auto size = it->file_size(fileEc);
+                if (!fileEc)
+                    totalBytes += size;
+            }
+        }
+
+        SetRegString(key, L"DisplayName", L"TricBar");
+        SetRegString(key, L"DisplayVersion", kAppVersion);
+        SetRegString(key, L"Publisher", L"Superplex");
+        SetRegString(key, L"InstallLocation", installDir);
+        SetRegString(key, L"UninstallString", L"\"" + setupPath + L"\" --uninstall");
+        SetRegString(key, L"DisplayIcon", installDir + L"\\icon.ico");
+        SetRegString(key, L"InstallDate", date);
+        SetRegDword(key, L"NoModify", 1);
+        SetRegDword(key, L"NoRepair", 1);
+        if (totalBytes > 0)
+            SetRegDword(key, L"EstimatedSize", static_cast<DWORD>(totalBytes / 1024));
+        RegCloseKey(key);
+        return true;
+    }
+
+    std::wstring ReadInstallLocationFromRegistry()
+    {
+        for (HKEY hive : { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER })
+        {
+            wchar_t buffer[MAX_PATH * 2] = {};
+            DWORD size = sizeof(buffer);
+            if (RegGetValueW(hive, kUninstallKeyPath, L"InstallLocation", RRF_RT_REG_SZ, nullptr, buffer, &size) == ERROR_SUCCESS &&
+                buffer[0] != L'\0')
+                return buffer;
+        }
+        return L"";
+    }
+
+    // Modo --uninstall (sem janela principal): remove atalhos, registro e a pasta de instalação.
+    int RunUninstall()
+    {
+        if (MessageBoxW(nullptr, L"Deseja realmente remover o TricBar deste computador?", L"Desinstalar TricBar",
+                MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
+            return 1;
+
+        std::wstring installDir = ReadInstallLocationFromRegistry();
+        if (installDir.empty())
+        {
+            wchar_t self[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, self, MAX_PATH);
+            installDir = std::filesystem::path(self).parent_path().wstring();
+        }
+
+        // Sai da pasta de instalação para ela poder ser apagada.
+        std::wstring tempDir = GetTempDirectory();
+        SetCurrentDirectoryW(tempDir.c_str());
+
+        _wsystem(L"taskkill /IM TricBarConfigurator.exe /F /T >nul 2>&1");
+        _wsystem(L"taskkill /IM TricBar.exe /F /T >nul 2>&1");
+
+        std::wstring desktop = GetDesktopDirectory();
+        if (!desktop.empty())
+            DeleteFileW((desktop + L"\\TricBar.lnk").c_str());
+        std::wstring startMenu = GetStartMenuTricBarDirectory();
+        DeleteFileW((startMenu + L"\\TricBar.lnk").c_str());
+        DeleteFileW((startMenu + L"\\Desinstalar TricBar.lnk").c_str());
+        RemoveDirectoryW(startMenu.c_str()); // só remove se estiver vazia
+
+        HKEY hklm = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0, KEY_ALL_ACCESS, &hklm) == ERROR_SUCCESS)
+        {
+            RegDeleteTreeW(hklm, L"TricBar");
+            RegCloseKey(hklm);
+        }
+        HKEY hkcu = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0, KEY_ALL_ACCESS, &hkcu) == ERROR_SUCCESS)
+        {
+            RegDeleteTreeW(hkcu, L"TricBar");
+            RegCloseKey(hkcu);
+        }
+
+        // Este .exe pode estar dentro da pasta: um script apaga a pasta depois que ele fechar.
+        std::wstring scriptPath = tempDir + L"TricBar-uninstall-" + std::to_wstring(GetTickCount64()) + L".cmd";
+        std::wstring script =
+            L"@echo off\r\nchcp 65001 >nul\r\nset /a tries=0\r\n:retry\r\n"
+            L"timeout /t 2 /nobreak >nul 2>nul\r\n"
+            L"rmdir /s /q \"" + installDir + L"\" >nul 2>nul\r\n"
+            L"if not exist \"" + installDir + L"\" goto done\r\n"
+            L"set /a tries+=1\r\nif %tries% lss 60 goto retry\r\n:done\r\n"
+            L"del /f /q \"%~f0\"\r\n";
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, script.c_str(), static_cast<int>(script.size()), nullptr, 0, nullptr, nullptr);
+        std::string utf8(utf8Len, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, script.c_str(), static_cast<int>(script.size()), utf8.data(), utf8Len, nullptr, nullptr);
+        {
+            std::ofstream out(scriptPath, std::ios::binary);
+            out.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
+        }
+
+        std::wstring cmdLine = L"cmd.exe /d /c \"\"" + scriptPath + L"\"\"";
+        std::vector<wchar_t> buffer(cmdLine.begin(), cmdLine.end());
+        buffer.push_back(L'\0');
+        STARTUPINFOW si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessW(nullptr, buffer.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, tempDir.c_str(), &si, &pi))
+        {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+
+        MessageBoxW(nullptr, L"O TricBar foi removido deste computador.", L"Desinstalar TricBar", MB_OK | MB_ICONINFORMATION);
+        return 0;
+    }
+
+    std::wstring DescribeLastFailure()
+    {
+        if (g_lastLaunchError != 0)
+            return L" (não foi possível iniciar o instalador, erro " + std::to_wstring(g_lastLaunchError) + L")";
+        if (g_lastExitCode != 0)
+            return L" (código " + std::to_wstring(g_lastExitCode) + L")";
+        return L"";
+    }
+
     DWORD WINAPI InstallWorkerThread(LPVOID)
     {
         std::wstring tempDir = GetTempDirectory();
@@ -437,7 +710,7 @@ namespace
         if (!InstallDotNetDesktopRuntimeIfNeeded())
         {
             g_failed = true;
-            g_failureMessage = L"Não foi possível instalar o .NET 8 Desktop Runtime. Verifique sua conexão com a internet.";
+            g_failureMessage = L"Não foi possível instalar o .NET 8 Desktop Runtime." + DescribeLastFailure();
             UpdateUIStage(L"Erro na instalação", g_failureMessage.c_str(), 0, false);
             EnableWindow(g_hwndCancelBtn, TRUE);
             SetWindowTextW(g_hwndCancelBtn, L"Fechar");
@@ -447,7 +720,7 @@ namespace
         if (!InstallWindowsAppRuntimeIfNeeded())
         {
             g_failed = true;
-            g_failureMessage = L"Não foi possível instalar o Windows App Runtime 1.6. Verifique sua conexão com a internet.";
+            g_failureMessage = L"Não foi possível instalar o Windows App Runtime 1.6." + DescribeLastFailure();
             UpdateUIStage(L"Erro na instalação", g_failureMessage.c_str(), 0, false);
             EnableWindow(g_hwndCancelBtn, TRUE);
             SetWindowTextW(g_hwndCancelBtn, L"Fechar");
@@ -487,6 +760,13 @@ namespace
         {
             g_failed = true;
             g_failureMessage = L"Falha ao descompactar os arquivos do aplicativo.";
+            std::wstring reason = ReadExtractLogMessage();
+            if (!reason.empty())
+            {
+                if (reason.size() > 100)
+                    reason.resize(100);
+                g_failureMessage += L" " + reason;
+            }
             UpdateUIStage(L"Erro na instalação", g_failureMessage.c_str(), 0, false);
             EnableWindow(g_hwndCancelBtn, TRUE);
             SetWindowTextW(g_hwndCancelBtn, L"Fechar");
@@ -519,13 +799,24 @@ namespace
         std::wstring shortcutPath = std::wstring(startMenuDirectory) + L"\\TricBar.lnk";
         CreateShortcut(shortcutPath, appPath);
 
+        // Registra em "Aplicativos instalados" (Configurações > Aplicativos) com desinstalador
+        const std::wstring setupPath = installDirectory + L"\\" + kSetupFileName;
+        if (CopySetupToInstallDirectory(installDirectory, setupPath))
+        {
+            CreateShortcut(std::wstring(startMenuDirectory) + L"\\Desinstalar TricBar.lnk", setupPath,
+                L"--uninstall", L"Desinstalar TricBar");
+            RegisterUninstallEntry(installDirectory, setupPath);
+        }
+
         UpdateUIStage(L"Instalação concluída com sucesso!", L"TricBar foi instalado e está pronto para uso.", 100, false);
         g_completed = true;
 
         if (g_hwndActionBtn)
         {
+            SetWindowTextW(g_hwndActionBtn, L"Abrir");
             ShowWindow(g_hwndActionBtn, SW_SHOW);
             EnableWindow(g_hwndActionBtn, TRUE);
+            InvalidateRect(g_hwndActionBtn, nullptr, FALSE);
         }
         if (g_hwndCancelBtn)
         {
@@ -697,6 +988,176 @@ namespace
         return RegisterClassExW(&wcBtn) != 0;
     }
 
+    // ---- Barra de progresso própria: cápsula suave, sem artefatos do controle nativo ----
+    struct ProgressState
+    {
+        int target = 0;
+        double shown = 0.0;
+        bool marquee = false;
+        bool error = false;
+        double phase = 0.0;
+    };
+
+    LRESULT CALLBACK ThemeProgressProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        auto* st = reinterpret_cast<ProgressState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+        switch (msg)
+        {
+        case WM_NCCREATE:
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(new ProgressState()));
+            return TRUE;
+        case WM_CREATE:
+            SetTimer(hWnd, 1, 16, nullptr);
+            return 0;
+        case PBM_SETRANGE:
+        case PBM_SETRANGE32:
+            return 0;
+        case PBM_SETPOS:
+            if (st)
+            {
+                int old = st->target;
+                st->target = static_cast<int>(wParam);
+                if (st->target < 0) st->target = 0;
+                if (st->target > 100) st->target = 100;
+                if (st->target < st->shown) st->shown = st->target; // novo passo: reinicia sem "voltar" animado
+                return old;
+            }
+            return 0;
+        case PBM_SETSTATE:
+            if (st)
+            {
+                st->error = (wParam == 2);
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 1;
+        case PBM_SETMARQUEE:
+            if (st)
+            {
+                bool on = (wParam != 0);
+                if (on && !st->marquee) st->phase = 0.0;
+                st->marquee = on;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 1;
+        case WM_TIMER:
+            if (st)
+            {
+                bool dirty = false;
+                if (st->marquee)
+                {
+                    st->phase += 16.0 / 1500.0;
+                    if (st->phase >= 1.0) st->phase -= 1.0;
+                    dirty = true;
+                }
+                else if (st->shown != st->target)
+                {
+                    double diff = st->target - st->shown;
+                    st->shown += (diff > -0.1 && diff < 0.1) ? diff : diff * 0.18;
+                    dirty = true;
+                }
+                if (dirty && IsWindowVisible(hWnd))
+                    InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT:
+            {
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hWnd, &ps);
+                RECT rc;
+                GetClientRect(hWnd, &rc);
+                const int W = rc.right, H = rc.bottom;
+                const int S = 4; // supersampling para bordas suaves
+                const int BW = W * S, BH = H * S;
+
+                HDC mem = CreateCompatibleDC(hdc);
+                HBITMAP bmp = CreateCompatibleBitmap(hdc, BW, BH);
+                HGDIOBJ oldBmp = SelectObject(mem, bmp);
+
+                // Fundo = cor do cartão
+                HBRUSH cardBrush = CreateSolidBrush(RGB(14, 14, 14));
+                RECT full{ 0, 0, BW, BH };
+                FillRect(mem, &full, cardBrush);
+                DeleteObject(cardBrush);
+
+                // Trilho em cápsula com borda sutil
+                HBRUSH trackBrush = CreateSolidBrush(RGB(22, 22, 22));
+                HPEN trackPen = CreatePen(PS_INSIDEFRAME, S, RGB(46, 46, 46));
+                HGDIOBJ oB = SelectObject(mem, trackBrush);
+                HGDIOBJ oP = SelectObject(mem, trackPen);
+                RoundRect(mem, 0, 0, BW, BH, BH, BH);
+                SelectObject(mem, oB);
+                SelectObject(mem, oP);
+                DeleteObject(trackBrush);
+                DeleteObject(trackPen);
+
+                // Preenchimento
+                const int inset = 3 * S;
+                const int x0 = inset, y0 = inset, x1 = BW - inset, y1 = BH - inset;
+                const int ih = y1 - y0;
+                const int iw = x1 - x0;
+                HBRUSH fillBrush = CreateSolidBrush((st && st->error) ? RGB(196, 43, 28) : RGB(0, 120, 212));
+                HGDIOBJ oB2 = SelectObject(mem, fillBrush);
+                HGDIOBJ oP2 = SelectObject(mem, GetStockObject(NULL_PEN));
+
+                if (st && st->error)
+                {
+                    RoundRect(mem, x0, y0, x1 + 1, y1 + 1, ih, ih); // erro: cápsula vermelha cheia
+                }
+                else if (st && st->marquee)
+                {
+                    HRGN clip = CreateRoundRectRgn(x0, y0, x1 + 1, y1 + 1, ih, ih);
+                    SelectClipRgn(mem, clip);
+                    const double segW = iw * 0.30;
+                    double t = st->phase;
+                    double e = t * t * (3.0 - 2.0 * t); // suaviza início/fim
+                    double left = x0 - segW + (iw + segW) * e;
+                    RoundRect(mem, static_cast<int>(left), y0, static_cast<int>(left + segW) + 1, y1 + 1, ih, ih);
+                    SelectClipRgn(mem, nullptr);
+                    DeleteObject(clip);
+                }
+                else if (st && st->shown > 0.05)
+                {
+                    int fw = static_cast<int>(iw * (st->shown / 100.0));
+                    if (fw < ih) fw = ih; // nunca menor que a cápsula
+                    RoundRect(mem, x0, y0, x0 + fw + 1, y1 + 1, ih, ih);
+                }
+                SelectObject(mem, oB2);
+                SelectObject(mem, oP2);
+                DeleteObject(fillBrush);
+
+                SetStretchBltMode(hdc, HALFTONE);
+                SetBrushOrgEx(hdc, 0, 0, nullptr);
+                StretchBlt(hdc, 0, 0, W, H, mem, 0, 0, BW, BH, SRCCOPY);
+
+                SelectObject(mem, oldBmp);
+                DeleteObject(bmp);
+                DeleteDC(mem);
+                EndPaint(hWnd, &ps);
+                return 0;
+            }
+        case WM_NCDESTROY:
+            KillTimer(hWnd, 1);
+            delete st;
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, 0);
+            break;
+        }
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
+    }
+
+    bool RegisterThemeProgressClass(HINSTANCE hInstance)
+    {
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = ThemeProgressProc;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = nullptr;
+        wc.lpszClassName = L"TricBarProgress";
+        return RegisterClassExW(&wc) != 0;
+    }
+
     LRESULT CALLBACK InstallerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         switch (uMsg)
@@ -742,17 +1203,12 @@ namespace
                     WS_CHILD | WS_VISIBLE | SS_LEFT, 40, 104, 440, 20, hwnd, nullptr, nullptr, nullptr);
                 SendMessageW(g_hwndStage, WM_SETFONT, reinterpret_cast<WPARAM>(g_hFontNormal), TRUE);
 
-                g_hwndProgress = CreateWindowExW(0, PROGRESS_CLASSW, nullptr,
-                    WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 40, 132, 444, 18, hwnd, nullptr, nullptr, nullptr);
+                g_hwndProgress = CreateWindowExW(0, L"TricBarProgress", nullptr,
+                    WS_CHILD | WS_VISIBLE, 40, 132, 444, 18, hwnd, nullptr, nullptr, nullptr);
                 SendMessageW(g_hwndProgress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
-                SendMessageW(g_hwndProgress, PBM_SETBKCOLOR, 0, RGB(22, 22, 22));
-                SendMessageW(g_hwndProgress, PBM_SETBARCOLOR, 0, RGB(0, 120, 212));
-                // Barra em formato de cápsula (cantos totalmente circulares)
-                HRGN rgnProgressPill = CreateRoundRectRgn(0, 0, 444, 18, 18, 18);
-                SetWindowRgn(g_hwndProgress, rgnProgressPill, TRUE);
 
                 g_hwndDetail = CreateWindowExW(0, L"STATIC", L"Preparando ambiente de instalação...",
-                    WS_CHILD | WS_VISIBLE | SS_LEFT, 40, 158, 440, 20, hwnd, nullptr, nullptr, nullptr);
+                    WS_CHILD | WS_VISIBLE | SS_LEFT, 40, 158, 440, 32, hwnd, nullptr, nullptr, nullptr);
                 SendMessageW(g_hwndDetail, WM_SETFONT, reinterpret_cast<WPARAM>(g_hFontSmall), TRUE);
 
                 g_hwndActionBtn = CreateWindowExW(0, L"TricBarThemeButton", L"Iniciar TricBar",
@@ -781,7 +1237,7 @@ namespace
                     0, false);
                 ShowWindow(g_hwndProgress, SW_HIDE);
                 if (g_hwndDetail)
-                    SetWindowPos(g_hwndDetail, nullptr, 40, 162, 440, 20, SWP_NOZORDER | SWP_NOACTIVATE);
+                    SetWindowPos(g_hwndDetail, nullptr, 40, 160, 440, 32, SWP_NOZORDER | SWP_NOACTIVATE);
                 if (g_hwndActionBtn)
                 {
                     SetWindowTextW(g_hwndActionBtn, L"Instalar");
@@ -861,7 +1317,7 @@ namespace
             }
 
         case WM_COMMAND:
-            if (LOWORD(wParam) == 1001) // Instalar (confirmação) / Iniciar TricBar (concluído)
+            if (LOWORD(wParam) == 1001) // Instalar (confirmação) / Abrir (concluído)
             {
                 if (!g_installStarted.exchange(true))
                 {
@@ -870,8 +1326,9 @@ namespace
                     ShowWindow(g_hwndPathEdit, SW_HIDE);
                     ShowWindow(g_hwndBrowseBtn, SW_HIDE);
                     ShowWindow(g_hwndProgress, SW_SHOW);
+                    InvalidateRect(g_hwndMain, nullptr, TRUE); // apaga o "fantasma" do campo de pasta
                     if (g_hwndDetail)
-                        SetWindowPos(g_hwndDetail, nullptr, 40, 158, 440, 20, SWP_NOZORDER | SWP_NOACTIVATE);
+                        SetWindowPos(g_hwndDetail, nullptr, 40, 158, 440, 32, SWP_NOZORDER | SWP_NOACTIVATE);
                     if (g_hwndActionBtn)
                         ShowWindow(g_hwndActionBtn, SW_HIDE);
                     UpdateUIStage(L"Preparando instalação...", L"Verificando ambiente...", 0, true);
@@ -930,10 +1387,17 @@ namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int)
 {
+    {
+        std::wstring cmdLine = GetCommandLineW();
+        for (auto& ch : cmdLine) ch = static_cast<wchar_t>(towlower(ch));
+        if (cmdLine.find(L"--uninstall") != std::wstring::npos)
+            return RunUninstall();
+    }
+
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)))
         return 1;
 
-    if (!RegisterThemeButtonClass(hInstance))
+    if (!RegisterThemeButtonClass(hInstance) || !RegisterThemeProgressClass(hInstance))
         return 1;
 
     INITCOMMONCONTROLSEX icc{};
