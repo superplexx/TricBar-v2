@@ -3,11 +3,9 @@
 
 [Go to English (US)](#en-us)
 
-## Novidades na v1.3.0
+## Novidades na v1.4.0.
 
-- Interface do configurador renovada: cartões de modos rápidos com miniatura do efeito, indicador de página ativa na navegação lateral, badge de versão e cartão "Sobre" em Configurações
-- Novos atalhos na página de aparência: mais cores rápidas e botão "Restaurar padrão"
-- Botão para abrir o repositório no GitHub diretamente pela aba Configurações
+- Animações melhoradas do modo Liquid Glass
 
 # PT-BR
 O TricBar personaliza a aparência da barra de tarefas do Windows com efeitos Blur, Acrylic, Liquid Glass e cor sólida. O configurador permite escolher o modo visual, ajustar a cor e a opacidade e configurar a inicialização com o Windows
@@ -67,11 +65,9 @@ Consulte o arquivo de licença do repositório
 # EN-US
 TricBar customizes the appearance of the Windows taskbar with Blur, Acrylic, Liquid Glass, and solid color effects. The configurator allows you to choose the visual mode, adjust color and opacity, and set the application to launch automatically with Windows.
 
-## What's new in v1.3.0
+## What's new in v1.4.0
 
-- Revamped configurator interface: quick-mode cards featuring effect thumbnails, an active-page indicator in the side navigation, a version badge, and an "About" card within Settings
-- New shortcuts on the appearance page: additional quick-select colors and a "Restore defaults" button
-- A button to open the GitHub repository directly from the Settings tab
+- Improved Liquid Glass mode animations
 
 ## Requirements
 
