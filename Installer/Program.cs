@@ -20,7 +20,7 @@ internal static class Program
     private const string EngineFileName = "TricBar.exe";
     private const string SetupFileName = "Setup.exe";
     private const string AppBundleResourceName = "TricBarSetup.AppBundle.zip";
-    private const string AppVersion = "1.3.0";
+    private const string AppVersion = "1.0.0";
 
 #if TRICBAR_WEB_SETUP
     private const string AppBundleUrl = "https://raw.githubusercontent.com/superplexx/TricBar-v2/webdownloads/TricBar-v2.zip";

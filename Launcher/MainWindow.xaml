@@ -156,7 +156,7 @@
                     </StackPanel>
                 </Border>
                 <TextBlock Text="TricBar · Windows Utility" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" HorizontalAlignment="Center" />
-                <TextBlock Text="v1.3.0" Foreground="{StaticResource VersionAccentBrush}" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Text="v1.0.0" Foreground="{StaticResource VersionAccentBrush}" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </StackPanel>
         </Grid>
 
@@ -172,7 +172,7 @@
                                 <TextBlock Text="Bem-vindo ao TricBar" FontSize="30" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
                                 <Border VerticalAlignment="Center" CornerRadius="8" Padding="10,4"
                                         Background="#26FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1">
-                                    <TextBlock Text="v1.3.0" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource VersionAccentBrush}" />
+                                    <TextBlock Text="v1.0.0" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource VersionAccentBrush}" />
                                 </Border>
                             </StackPanel>
                             <TextBlock Text="Sua barra de tarefas, do seu jeito." Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" />
@@ -477,7 +477,7 @@
                                     <Image x:Name="AboutLogo" Width="34" Height="34" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="TricBar" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
-                                        <TextBlock Text="Versão 1.3.0" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <TextBlock Text="Versão 1.0.0" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" />
                                     </StackPanel>
                                 </StackPanel>
                                 <TextBlock Text="Configurações salvas automaticamente em %APPDATA%\TricBar\config.ini."

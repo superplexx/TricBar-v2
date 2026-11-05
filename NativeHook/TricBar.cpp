@@ -64,7 +64,7 @@ static constexpr wchar_t kActiveEvent[]  = L"TricBar_Blur_Active";
 static constexpr wchar_t kAppliedEvent[] = L"TricBar_Blur_Applied";
 static constexpr char kCompositionFunction[] = "SetWindowCompositionAttribute";
 static constexpr wchar_t kTagMarker[]    = L"TricBar.Transparent";
-static constexpr wchar_t kVersion[]      = L"1.3.0";
+static constexpr wchar_t kVersion[]      = L"1.0.0";
 
 struct CompositionAttributeData
 {
@@ -358,7 +358,7 @@ static void SignalApplied()
 
 struct Cfg
 {
-    int  mode = 3;      // 0 normal, 1 clear, 2 blur, 3 acrylic, 4 color
+    int  mode = 3;      // 0 normal, 1 clear, 2 blur, 3 acrylic, 4 liquid glass claro, 5 cor, 6 liquid glass escuro
     int  rgb = 0x808080; // 0xRRGGBB; neutral Windows-style gray tint
     int  opacity = 60;  // 0..100
 
@@ -457,23 +457,26 @@ static wuxm::Brush MakeBrush(Cfg const& c)
     {
         try
         {
-            const uint8_t glassR = static_cast<uint8_t>((r + 205) / 2);
-            const uint8_t glassG = static_cast<uint8_t>((g + 225) / 2);
-            const uint8_t glassB = static_cast<uint8_t>((b + 250) / 2);
+            // Vidro claro: a cor escolhida pesa 1/3 sobre um branco quase neutro (sem o azul forte de antes).
+            const uint8_t glassR = static_cast<uint8_t>((r + 2 * 238) / 3);
+            const uint8_t glassG = static_cast<uint8_t>((g + 2 * 242) / 3);
+            const uint8_t glassB = static_cast<uint8_t>((b + 2 * 248) / 3);
             const bool darkMode = c.mode == 6;
-            const uint8_t tintR = darkMode ? 24 : glassR;
-            const uint8_t tintG = darkMode ? 28 : glassG;
-            const uint8_t tintB = darkMode ? 40 : glassB;
-            const uint8_t fallbackR = darkMode ? 32 : glassR;
-            const uint8_t fallbackG = darkMode ? 36 : glassG;
-            const uint8_t fallbackB = darkMode ? 48 : glassB;
-            const float tintOpacity = 0.08f + (c.opacity / 100.0f) * 0.20f;
+            const uint8_t tintR = darkMode ? 22 : glassR;
+            const uint8_t tintG = darkMode ? 23 : glassG;
+            const uint8_t tintB = darkMode ? 27 : glassB;
+            const uint8_t fallbackR = darkMode ? 30 : glassR;
+            const uint8_t fallbackG = darkMode ? 31 : glassG;
+            const uint8_t fallbackB = darkMode ? 36 : glassB;
+            const float tintOpacity = 0.10f + (c.opacity / 100.0f) * 0.16f;
 
             wuxm::AcrylicBrush br;
             br.BackgroundSource(wuxm::AcrylicBackgroundSource::Backdrop);
             br.TintColor(winrt::Windows::UI::Color{ 255, tintR, tintG, tintB });
             br.TintOpacity(tintOpacity);
-            br.TintLuminosityOpacity(winrt::box_value(darkMode ? 0.38 : 0.58).as<wf::IReference<double>>());
+            br.TintLuminosityOpacity(winrt::box_value(darkMode ? 0.30 : 0.50).as<wf::IReference<double>>());
+            // Cor usada quando os efeitos de transparencia estao desligados / economia de energia.
+            br.FallbackColor(winrt::Windows::UI::Color{ 255, fallbackR, fallbackG, fallbackB });
             Log(L"[v%s] pincel Liquid Glass criado: cor=%06X opacidade=%d backdrop dark=%s", kVersion, c.rgb, c.opacity, darkMode ? L"true" : L"false");
             return br;
         }
@@ -525,6 +528,7 @@ struct Entry
     double originalRadiusX{};
     double originalRadiusY{};
     double originalStrokeThickness{};
+    double originalOpacity{ 1.0 };
     wux::HorizontalAlignment originalHorizontalAlignment{};
     wux::VerticalAlignment originalVerticalAlignment{};
     wux::Thickness originalMargin{};
@@ -540,7 +544,10 @@ struct Entry
     bool liquidGlassApplied{ false };
     bool liquidGlassStyleConfigured{ false };
     int liquidGlassAppCount{ -1 };
+    double liquidGlassSpan{ -1 };     // buttonSpan usado na ultima largura calculada
+    int liquidGlassStrokeMode{ -1 };  // modo (4 claro / 6 escuro) com que a borda foi pintada
     int buttonCount{ -1 };       // ultima contagem de botoes da barra
+    double buttonSpan{ 0 };      // largura real ocupada pelos botoes de apps (da borda esquerda do primeiro a direita do ultimo)
     uint32_t buttonGen{ 0 };     // g_taskListGen visto na ultima contagem
     ULONGLONG nextRecount{ 0 };  // proxima recontagem completa (varre a arvore)
     ULONGLONG nextQuick{ 0 };    // proxima reavaliacao rapida dos botoes ja conhecidos
@@ -569,11 +576,14 @@ static void RestoreLiquidGlassStyle(std::shared_ptr<Entry> const& e)
         e->rect.Margin(e->originalMargin);
         e->rect.Stroke(e->originalStroke);
         e->rect.StrokeThickness(e->originalStrokeThickness);
+        e->rect.Opacity(e->originalOpacity);
     }
     catch (...) {}
     e->liquidGlassApplied = false;
     e->liquidGlassStyleConfigured = false;
     e->liquidGlassAppCount = -1;
+    e->liquidGlassStrokeMode = -1;
+    e->liquidGlassSpan = -1;
 }
 
 // Conta os Taskbar.TaskListButton visiveis na arvore XAML da barra (mesmo criterio que o
@@ -676,6 +686,29 @@ static int QuickCountButtons(std::shared_ptr<Entry> const& e)
     return count;
 }
 
+// Largura real ocupada pelos botoes de apps visiveis (nao da pra supor 32/48 px por botao:
+// depende do DPI, do espacamento e de indicadores). 0 se nao der para medir.
+static double MeasureButtonSpan(std::shared_ptr<Entry> const& e)
+{
+    try
+    {
+        wux::FrameworkElement rootFe{ nullptr };
+        if (e->buttonRoot) rootFe = e->buttonRoot.get();
+        if (!rootFe) return 0;
+        double left = 1e9, right = -1e9;
+        for (auto const& weak : e->buttons)
+        {
+            auto fe = weak.get();
+            if (!fe || !ButtonOnScreen(fe, rootFe)) continue;
+            const double x = fe.TransformToVisual(rootFe).TransformPoint(wf::Point{ 0, 0 }).X;
+            left = std::min(left, x);
+            right = std::max(right, x + fe.ActualWidth());
+        }
+        return right > left ? right - left : 0;
+    }
+    catch (...) { return 0; }
+}
+
 static int CurrentButtonCount(std::shared_ptr<Entry> const& e)
 {
     const uint32_t gen = g_taskListGen.load(std::memory_order_relaxed);
@@ -685,14 +718,16 @@ static int CurrentButtonCount(std::shared_ptr<Entry> const& e)
     {
         e->buttonGen = gen;
         e->buttonCount = ScanTaskListButtons(e, before < 0 ? 0 : before);
+        e->buttonSpan = MeasureButtonSpan(e);
         // se mudou, confere de novo em 400 ms (o layout do botao novo ainda pode nao ter largura)
-        e->nextRecount = now + (e->buttonCount != before ? 400 : e->buttonCount == 0 ? 1000 : 10000);
-        e->nextQuick = now + 250;
+        e->nextRecount = now + (e->buttonCount != before ? 300 : e->buttonCount == 0 ? 1000 : 10000);
+        e->nextQuick = now + 100;
     }
     else if (now >= e->nextQuick)
     {
-        e->nextQuick = now + 250;
+        e->nextQuick = now + 100;
         e->buttonCount = QuickCountButtons(e);
+        e->buttonSpan = MeasureButtonSpan(e);
     }
     if (e->buttonCount != before)
         Log(L"[v%s] botoes de apps na barra: %d (conhecidos: %zu)", kVersion, e->buttonCount, e->buttons.size());
@@ -726,18 +761,29 @@ static void AnimateLiquidGlassWidth(std::shared_ptr<Entry> const& e, double targ
                 auto entry = weak.lock();
                 if (!entry || !entry->liquidGlassAnimating) return;
 
-                const double progress = std::min(
-                    static_cast<double>(GetTickCount64() - entry->liquidGlassAnimationStart) / 65.0, 1.0);
-                const double eased = 1.0 - std::pow(1.0 - progress, 3.0);
-                const double width = entry->liquidGlassAnimationFrom +
-                    (entry->liquidGlassWidth - entry->liquidGlassAnimationFrom) * eased;
-                entry->rect.Width(width);
-
-                if (progress >= 1.0)
+                // Um tick sem try/catch que lance excecao derruba o Explorer.
+                try
                 {
-                    entry->rect.Width(entry->liquidGlassWidth);
+                    const double progress = std::min(
+                        static_cast<double>(GetTickCount64() - entry->liquidGlassAnimationStart) / 150.0, 1.0);
+                    // ease-out cubico: reage na hora e assenta suave no fim (quase instantaneo ao abrir/fechar app).
+                    const double inv = 1.0 - progress;
+                    const double eased = 1.0 - inv * inv * inv;
+                    const double width = entry->liquidGlassAnimationFrom +
+                        (entry->liquidGlassWidth - entry->liquidGlassAnimationFrom) * eased;
+                    entry->rect.Width(width);
+
+                    if (progress >= 1.0)
+                    {
+                        entry->rect.Width(entry->liquidGlassWidth);
+                        entry->liquidGlassAnimating = false;
+                        entry->liquidGlassAnimationTimer.Stop();
+                    }
+                }
+                catch (...)
+                {
                     entry->liquidGlassAnimating = false;
-                    entry->liquidGlassAnimationTimer.Stop();
+                    try { entry->liquidGlassAnimationTimer.Stop(); } catch (...) {}
                 }
             });
     }
@@ -755,13 +801,28 @@ static void ApplyLiquidGlassStyle(std::shared_ptr<Entry> const& e)
     try
     {
         const int appCount = CurrentButtonCount(e);
-        if (e->liquidGlassStyleConfigured && appCount == e->liquidGlassAppCount)
+        const double span = e->buttonSpan;
+        if (e->liquidGlassStyleConfigured && appCount == e->liquidGlassAppCount &&
+            std::abs(span - e->liquidGlassSpan) < 1 &&
+            e->liquidGlassStrokeMode == e->applied.mode)
             return;
         e->liquidGlassAppCount = appCount;
+        e->liquidGlassSpan = span;
 
         if (!e->liquidGlassApplied)
             e->liquidGlassApplied = true;
-        const double width = std::clamp((appCount * 32.0) + 180.0, 180.0, 800.0);
+        // Largura = botoes de apps (medidos; se nao der, ~48 px cada) + 104 px para o botao Iniciar e margens.
+        // O teto acompanha a largura da barra (deixa ~180 px de cada lado para widgets e bandeja).
+        double maxWidth = 1400.0;
+        try
+        {
+            if (e->buttonRoot)
+                if (auto rootFe = e->buttonRoot.get())
+                    if (rootFe.ActualWidth() > 0) maxWidth = std::max(360.0, rootFe.ActualWidth() - 360.0);
+        }
+        catch (...) {}
+        const double appsWidth = span > 0 ? span : appCount * 48.0;
+        const double width = std::clamp(appsWidth + 104.0, 104.0, maxWidth);
         const bool widthChanged = e->liquidGlassWidth < 0 ||
             std::abs(e->liquidGlassWidth - width) >= 1;
         AnimateLiquidGlassWidth(e, width);
@@ -773,10 +834,16 @@ static void ApplyLiquidGlassStyle(std::shared_ptr<Entry> const& e)
             e->rect.HorizontalAlignment(wux::HorizontalAlignment::Center);
             e->rect.VerticalAlignment(wux::VerticalAlignment::Center);
             e->rect.Margin(wux::Thickness{ 0, 0, 0, 2 });
-            e->rect.Stroke(wuxm::SolidColorBrush(winrt::Windows::UI::Color{ 160, 240, 255, 255 }));
             e->rect.StrokeThickness(1.0);
             e->rect.Opacity(1.0);
             e->liquidGlassStyleConfigured = true;
+        }
+        if (e->liquidGlassStrokeMode != e->applied.mode)
+        {
+            // Borda fina e discreta: um fio de luz branco, mais fraco no escuro.
+            const uint8_t strokeAlpha = e->applied.mode == 6 ? 40 : 120;
+            e->rect.Stroke(wuxm::SolidColorBrush(winrt::Windows::UI::Color{ strokeAlpha, 255, 255, 255 }));
+            e->liquidGlassStrokeMode = e->applied.mode;
         }
         if (widthChanged)
             Log(L"[v%s] geometria Liquid Glass atualizada: largura=%.0f apps na barra=%d", kVersion, width, appCount);
@@ -853,6 +920,7 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
     e->originalVerticalAlignment = rect.VerticalAlignment();
     e->originalMargin = rect.Margin();
     e->originalStrokeThickness = rect.StrokeThickness();
+    e->originalOpacity = rect.Opacity();
     try { e->geometry = IsMainTaskbarBackground(rect); }
     catch (...) { e->geometry = false; }  // se falhar, o fundo ainda recebe cor
     RefreshCfg();
@@ -900,9 +968,9 @@ static void ApplyOnUiThread(wuxs::Rectangle const& rect)
                 Cfg now = GetCfg();
                 if (!(now == e->applied))
                 {
+                    e->applied = now;
                     if (now.mode == 4 || now.mode == 6) ApplyLiquidGlassStyle(e);
                     else RestoreLiquidGlassStyle(e);
-                    e->applied = now;
                     e->ours = MakeBrush(now);
                     e->rect.Fill(e->ours);
                     Log(L"[v%s] fundo atualizado: modo=%d cor=%06X opacidade=%d", kVersion, now.mode, now.rgb, now.opacity);

@@ -516,7 +516,7 @@ namespace
 
     // ---- Registro em "Aplicativos instalados" (Windows 11) e desinstalação ----
     constexpr wchar_t kUninstallKeyPath[] = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TricBar";
-    constexpr wchar_t kAppVersion[] = L"1.3.0";
+    constexpr wchar_t kAppVersion[] = L"1.0.0";
     constexpr wchar_t kSetupFileName[] = L"Setup.exe";
 
     void SetRegString(HKEY key, const wchar_t* name, const std::wstring& value)
