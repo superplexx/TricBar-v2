@@ -64,7 +64,7 @@ static constexpr wchar_t kActiveEvent[]  = L"TricBar_Blur_Active";
 static constexpr wchar_t kAppliedEvent[] = L"TricBar_Blur_Applied";
 static constexpr char kCompositionFunction[] = "SetWindowCompositionAttribute";
 static constexpr wchar_t kTagMarker[]    = L"TricBar.Transparent";
-static constexpr wchar_t kVersion[]      = L"1.0.0";
+static constexpr wchar_t kVersion[]      = L"1.4.0";
 
 struct CompositionAttributeData
 {

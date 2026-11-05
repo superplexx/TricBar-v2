@@ -156,7 +156,7 @@
                     </StackPanel>
                 </Border>
                 <TextBlock Text="TricBar · Windows Utility" Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" HorizontalAlignment="Center" />
-                <TextBlock Text="v1.0.0" Foreground="{StaticResource VersionAccentBrush}" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Text="v1.4.0" Foreground="{StaticResource VersionAccentBrush}" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </StackPanel>
         </Grid>
 

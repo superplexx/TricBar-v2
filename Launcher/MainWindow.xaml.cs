@@ -112,7 +112,7 @@ public sealed partial class MainWindow : Window
             ["Cancelar"] = "Cancel",
             ["OK"] = "OK",
             ["Sobre"] = "About",
-            ["Versão 1.0.0"] = "Version 1.0.0",
+            ["Versão 1.4.0"] = "Version 1.4.0",
             ["Restaurar padrão"] = "Restore default",
             ["Repositório no GitHub"] = "GitHub repository",
             ["Configurações salvas automaticamente em %APPDATA%\\TricBar\\config.ini."] =
