@@ -446,16 +446,34 @@ std::wstring PrepareHookDll()
     std::wstring directory(local);
     directory += L"\\TricBar";
     CreateDirectoryW(directory.c_str(), nullptr);
-    ULARGE_INTEGER time{};
-    time.LowPart = stamp.dwLowDateTime;
-    time.HighPart = stamp.dwHighDateTime;
-    wchar_t name[64]{};
-    swprintf_s(name, L"\\TricBar-%016llX.dll", time.QuadPart);
-    std::wstring destination = directory + name;
-    if (!CopyFileW(source.c_str(), destination.c_str(), TRUE))
+
+    // Nome fixo: nao cria mais uma DLL nova a cada versao/data de modificacao.
+    const std::wstring destination = directory + L"\\TricBar-hook.dll";
+
+    // Remove copias antigas (TricBar-<timestamp>.dll). As que estiverem em uso
+    // pelo Explorer falham silenciosamente e sao apagadas numa proxima vez.
+    WIN32_FIND_DATAW found{};
+    HANDLE search = FindFirstFileW((directory + L"\\TricBar-*.dll").c_str(), &found);
+    if (search != INVALID_HANDLE_VALUE)
     {
-        const DWORD error = GetLastError();
-        if (error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS) return {};
+        do
+        {
+            if (_wcsicmp(found.cFileName, L"TricBar-hook.dll") == 0) continue;
+            DeleteFileW((directory + L"\\" + found.cFileName).c_str());
+        } while (FindNextFileW(search, &found));
+        FindClose(search);
+    }
+
+    // So copia se a DLL de destino nao existir ou for de outra versao.
+    FILETIME existing{};
+    if (FileStamp(destination, &existing) && CompareFileTime(&existing, &stamp) == 0)
+        return destination;
+
+    if (!CopyFileW(source.c_str(), destination.c_str(), FALSE))
+    {
+        // Se estiver em uso (carregada no Explorer), reaproveita a existente.
+        DWORD attributes = GetFileAttributesW(destination.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES) return {};
     }
     return destination;
 }
