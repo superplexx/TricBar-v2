@@ -172,7 +172,7 @@
                                 <TextBlock Text="Bem-vindo ao TricBar" FontSize="30" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
                                 <Border VerticalAlignment="Center" CornerRadius="8" Padding="10,4"
                                         Background="#26FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1">
-                                    <TextBlock Text="v1.0.0" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource VersionAccentBrush}" />
+                                    <TextBlock Text="v1.4.0" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource VersionAccentBrush}" />
                                 </Border>
                             </StackPanel>
                             <TextBlock Text="Sua barra de tarefas, do seu jeito." Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" />
